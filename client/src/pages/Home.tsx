@@ -33,7 +33,7 @@ export default function Home() {
             <div className="w-10 h-10 bg-slate-900 flex items-center justify-center">
               <Download className="w-5 h-5 text-white" />
             </div>
-            <span>NexusStream</span>
+            <span>MediaPort</span>
           </div>
         </div>
       </motion.nav>

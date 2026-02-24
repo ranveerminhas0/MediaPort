@@ -24,11 +24,35 @@ export async function registerRoutes(
     try {
       const input = api.extract.input.parse(req.body);
 
-      // Phase 1 Fix: No shell interpolation.
-      const { stdout } = await execFileAsync("yt-dlp", ["--dump-json", "--no-playlist", "-f", "bestvideo+bestaudio/best", input.url]);
+      // Dynamic cookie handling mapping
+      const cookieArgs = fs.existsSync(path.join(process.cwd(), "cookies.txt"))
+        ? ["--cookies", "cookies.txt"]
+        : ["--cookies-from-browser", process.env.COOKIES_BROWSER || "chrome"];
+
+      // Phase 1 Fix: No shell interpolation. Added universal platform support by removing hardcoded -f formats
+      let stdout = "";
+      try {
+        const result = await execFileAsync("yt-dlp", [
+          "--dump-json",
+          "--no-playlist",
+          "--geo-bypass", // Helps unblock certain region-locked content autonomously
+          ...cookieArgs,
+          input.url
+        ], { maxBuffer: 10 * 1024 * 1024 }); // 10MB buffer to prevent crash from verbose cookie stderr warnings
+        stdout = result.stdout;
+      } catch (execError: any) {
+        // yt-dlp exits with code 1 if it can't find video/audio formats (like for a pure image)
+        // BUT it often still prints the JSON metadata to stdout. We can salvage it!
+        if (execError.stdout && execError.stdout.trim().startsWith('{')) {
+          stdout = execError.stdout;
+        } else {
+          throw execError;
+        }
+      }
+
       const data = JSON.parse(stdout);
 
-      const formats = (data.formats || []).map((f: any) => ({
+      let formats = (data.formats || []).map((f: any) => ({
         format_id: f.format_id?.toString() || "",
         ext: f.ext?.toString() || "",
         resolution: f.resolution?.toString() || f.format_note?.toString(),
@@ -38,6 +62,19 @@ export async function registerRoutes(
         acodec: f.acodec?.toString(),
         format_note: f.format_note?.toString()
       })).filter((f: any) => f.url);
+
+      // Fallback for single-file posts (like images) that don't use a 'formats' array
+      if (formats.length === 0 && data.url) {
+        formats = [{
+          format_id: data.format_id?.toString() || "default",
+          ext: data.ext?.toString() || "unknown",
+          resolution: data.resolution?.toString() || "Original",
+          url: data.url.toString(),
+          vcodec: "none",
+          acodec: "none",
+          format_note: "Original Quality"
+        }];
+      }
 
       const result = {
         id: data.id?.toString() || "unknown",
@@ -77,9 +114,15 @@ export async function registerRoutes(
       jobs.set(jobId, { status: "processing" });
       res.status(200).json({ jobId });
 
+      // Dynamic cookie handling mapping
+      const cookieArgs = fs.existsSync(path.join(process.cwd(), "cookies.txt"))
+        ? ["--cookies", "cookies.txt"]
+        : ["--cookies-from-browser", process.env.COOKIES_BROWSER || "chrome"];
+
       const args = [
         "-f", formatId,
         "--merge-output-format", "mp4",
+        ...cookieArgs,
         "-o", outTemplate,
         url
       ];
