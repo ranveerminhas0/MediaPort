@@ -8,46 +8,65 @@ import { useState } from "react";
 interface FormatListProps {
   formats: Format[];
   title: string;
+  url: string;
 }
 
-export function FormatList({ formats, title }: FormatListProps) {
+export function FormatList({ formats, title, url }: FormatListProps) {
   const { toast } = useToast();
   const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
-  
+
   const videoFormats = formats.filter(f => f.vcodec && f.vcodec !== 'none').sort((a, b) => (b.filesize || 0) - (a.filesize || 0));
   const audioFormats = formats.filter(f => !f.vcodec || f.vcodec === 'none').sort((a, b) => (b.filesize || 0) - (a.filesize || 0));
 
+  const checkStatus = async (jobId: string) => {
+    while (true) {
+      const res = await fetch(`/api/download/status/${jobId}`);
+      if (!res.ok) throw new Error("Failed to check status");
+      const data = await res.json();
+
+      if (data.status === "completed") {
+        return true;
+      } else if (data.status === "error") {
+        throw new Error(data.error || "Unknown error during download");
+      }
+
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  };
+
   const downloadMutation = useMutation({
-    mutationFn: async ({ videoUrl, audioUrl, formatId }: { videoUrl: string; audioUrl: string; formatId: string }) => {
+    mutationFn: async ({ formatId, combinedId }: { formatId: string; combinedId: string }) => {
       setActiveFormatId(formatId);
       const res = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrl, audioUrl, title }),
+        body: JSON.stringify({ url, formatId: combinedId, title }),
       });
-      if (!res.ok) throw new Error("Failed to process video");
-      
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
+      if (!res.ok) throw new Error("Failed to start processing");
+
+      const { jobId } = await res.json();
+
+      toast({
+        title: "Processing Started",
+        description: "Downloading and merging your media on the server... this could take a moment.",
+      });
+
+      await checkStatus(jobId);
+
+      window.location.href = `/api/download/file/${jobId}`;
+
       return { success: true };
     },
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Your merged video has been downloaded.",
+        description: "Your media is ready and downloading.",
       });
     },
     onError: (error) => {
       toast({
-        title: "Merge Failed",
+        title: "Download Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -65,18 +84,18 @@ export function FormatList({ formats, title }: FormatListProps) {
 
   const handleDownload = (format: Format) => {
     const isVideoOnly = format.vcodec && format.vcodec !== 'none' && (!format.acodec || format.acodec === 'none');
-    
+
     if (isVideoOnly) {
       // Find the best audio format to merge with
       const bestAudio = audioFormats[0];
       if (bestAudio) {
-        downloadMutation.mutate({ videoUrl: format.url, audioUrl: bestAudio.url, formatId: format.format_id });
+        downloadMutation.mutate({ formatId: format.format_id, combinedId: `${format.format_id}+${bestAudio.format_id}` });
         return;
       }
     }
-    
-    // Fallback or audio-only: direct download link
-    window.open(format.url, '_blank');
+
+    // Fallback or audio-only
+    downloadMutation.mutate({ formatId: format.format_id, combinedId: format.format_id });
   };
 
   return (
@@ -88,7 +107,7 @@ export function FormatList({ formats, title }: FormatListProps) {
             {videoFormats.slice(0, 5).map((f, i) => {
               const isProcessing = activeFormatId === f.format_id;
               return (
-                <motion.div 
+                <motion.div
                   key={`${f.format_id}-${i}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -101,7 +120,7 @@ export function FormatList({ formats, title }: FormatListProps) {
                     </span>
                     <span className="text-xs text-slate-400">{formatSize(f.filesize)}</span>
                   </div>
-                  <button 
+                  <button
                     onClick={() => handleDownload(f)}
                     disabled={isProcessing}
                     className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-slate-400 hover:text-slate-900 transition-colors disabled:opacity-50"
@@ -127,7 +146,7 @@ export function FormatList({ formats, title }: FormatListProps) {
           <h3 className="text-sm font-medium uppercase tracking-widest text-slate-400">Audio</h3>
           <div className="grid gap-2">
             {audioFormats.slice(0, 3).map((f, i) => (
-              <motion.div 
+              <motion.div
                 key={`${f.format_id}-${i}`}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -140,7 +159,7 @@ export function FormatList({ formats, title }: FormatListProps) {
                   </span>
                   <span className="text-xs text-slate-400">{formatSize(f.filesize)}</span>
                 </div>
-                <button 
+                <button
                   onClick={() => handleDownload(f)}
                   className="text-xs font-semibold uppercase tracking-tighter text-slate-400 hover:text-slate-900 transition-colors"
                 >

@@ -23,7 +23,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-slate-900 selection:bg-slate-900 selection:text-white">
-      <motion.nav 
+      <motion.nav
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         className="border-b border-slate-100 bg-white/80 backdrop-blur-md sticky top-0 z-50"
@@ -53,7 +53,7 @@ export default function Home() {
             </p>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
@@ -72,9 +72,9 @@ export default function Home() {
                   disabled={isPending}
                 />
               </div>
-              <Button 
-                size="lg" 
-                type="submit" 
+              <Button
+                size="lg"
+                type="submit"
                 disabled={isPending || !url}
                 className="w-full h-16 rounded-none bg-slate-900 hover:bg-slate-800 text-white font-medium text-lg transition-all overflow-hidden group"
               >
@@ -118,36 +118,36 @@ export default function Home() {
               <div className="space-y-12">
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   {result.thumbnail && (
-                    <motion.div 
+                    <motion.div
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       className="w-full sm:w-56 aspect-video bg-slate-100 overflow-hidden shrink-0 shadow-2xl"
                     >
-                      <img 
-                        src={result.thumbnail} 
-                        alt={result.title} 
+                      <img
+                        src={result.thumbnail}
+                        alt={result.title}
                         className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700 ease-out"
                       />
                     </motion.div>
                   )}
                   <div className="flex-1">
-                    <motion.h2 
+                    <motion.h2
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
                       className="text-2xl font-bold text-slate-900 mb-4 leading-tight tracking-tight"
                     >
                       {result.title}
                     </motion.h2>
-                    <button 
-                      onClick={handleReset} 
+                    <button
+                      onClick={handleReset}
                       className="text-sm font-bold uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors border-b-2 border-slate-100 hover:border-slate-900 pb-1"
                     >
                       New Extraction
                     </button>
                   </div>
                 </div>
-                
-                <FormatList formats={result.formats} title={result.title} />
+
+                <FormatList formats={result.formats} title={result.title} url={url} />
               </div>
             </motion.div>
           )}
