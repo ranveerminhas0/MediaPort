@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useExtract } from "@/hooks/use-downloader";
 import { FormatList } from "@/components/FormatList";
+import { ImageGallery } from "@/components/ImageGallery";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, Search } from "lucide-react";
@@ -49,7 +50,7 @@ export default function Home() {
               Streamline your <br />media workflow.
             </h1>
             <p className="text-slate-500 text-lg mb-12 max-w-md leading-relaxed">
-              Professional-grade extraction for high-quality video and audio assets.
+              Professional-grade extraction for high-quality video, audio, and image assets.
             </p>
           </motion.div>
 
@@ -147,7 +148,14 @@ export default function Home() {
                   </div>
                 </div>
 
-                <FormatList formats={result.formats} title={result.title} url={url} />
+                {/* Conditionally render based on media type */}
+                {result.mediaType === "video" || !result.mediaType ? (
+                  <FormatList formats={result.formats} title={result.title} url={url} />
+                ) : (
+                  result.images && result.images.length > 0 && (
+                    <ImageGallery images={result.images} title={result.title} />
+                  )
+                )}
               </div>
             </motion.div>
           )}
@@ -156,3 +164,4 @@ export default function Home() {
     </div>
   );
 }
+

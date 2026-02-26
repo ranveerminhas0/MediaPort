@@ -16,12 +16,22 @@ export const FormatSchema = z.object({
   format_note: z.string().optional(),
 });
 
+export const ImageSchema = z.object({
+  url: z.string(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  filename: z.string().optional(),
+  ext: z.string(),
+});
+
 export const ExtractorResponseSchema = z.object({
   id: z.string(),
   title: z.string(),
   thumbnail: z.string().optional(),
   extractor: z.string().optional(),
+  mediaType: z.enum(["video", "image", "gallery"]).default("video"),
   formats: z.array(FormatSchema),
+  images: z.array(ImageSchema).optional(),
 });
 
 export const api = {
@@ -51,4 +61,5 @@ export function buildUrl(path: string, params?: Record<string, string | number>)
 
 export type ExtractorResponse = z.infer<typeof ExtractorResponseSchema>;
 export type Format = z.infer<typeof FormatSchema>;
+export type ImageItem = z.infer<typeof ImageSchema>;
 export type ExtractInput = z.infer<typeof api.extract.input>;
