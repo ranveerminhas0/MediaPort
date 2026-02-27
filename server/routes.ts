@@ -18,12 +18,19 @@ const jobs = new Map<string, { status: "processing" | "completed" | "error", fil
 
 // Platform Detection
 
-type Platform = "youtube" | "instagram" | "twitter" | "pinterest" | "tiktok" | "reddit" | "tumblr" | "flickr" | "generic";
+type Platform = "youtube" | "youtube_music" | "instagram" | "twitter" | "pinterest" | "tiktok" | "reddit" | "tumblr" | "flickr" | "spotify" | "soundcloud" | "bandcamp" | "generic";
 
 function detectPlatform(url: string): Platform {
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace("www.", "");
 
+    // Audio-first platforms (check before generic youtube)
+    if (hostname.includes("open.spotify.com") || hostname.includes("spotify.com")) return "spotify";
+    if (hostname.includes("soundcloud.com")) return "soundcloud";
+    if (hostname.includes("bandcamp.com")) return "bandcamp";
+    if (hostname.includes("music.youtube.com")) return "youtube_music";
+
+    // Video/image platforms
     if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) return "youtube";
     if (hostname.includes("instagram.com")) return "instagram";
     if (hostname.includes("twitter.com") || hostname.includes("x.com")) return "twitter";
@@ -39,7 +46,7 @@ function detectPlatform(url: string): Platform {
   }
 }
 
-// Platforms where gallery-dl is the PRIMARY tool (image-first sites)
+// Platforms where gallery-dl is the PRIMARY tool (image-firt sites)
 const GALLERY_DL_PRIMARY: Platform[] = ["pinterest", "tumblr", "flickr", "reddit"];
 
 // Platforms where we try yt-dlp first, then fall back to gallery-dl
@@ -47,6 +54,18 @@ const MIXED_PLATFORMS: Platform[] = ["instagram", "twitter"];
 
 // Platforms where yt-dlp is always used (video-only)
 const YTDLP_ONLY: Platform[] = ["youtube", "tiktok"];
+
+// Audio-first platforms
+const AUDIO_PLATFORMS: Platform[] = ["spotify", "soundcloud", "bandcamp", "youtube_music"];
+
+// Static audio output format options (capped at 320kbps)
+const AUDIO_OUTPUT_FORMATS = [
+  { format_id: "mp3", label: "MP3 320kbps", ext: "mp3", quality: "320kbps" },
+  { format_id: "m4a", label: "M4A 256kbps", ext: "m4a", quality: "256kbps" },
+  { format_id: "wav", label: "WAV Lossless", ext: "wav", quality: "Lossless" },
+  { format_id: "flac", label: "FLAC (transcoded)", ext: "flac", quality: "~320kbps" },
+  { format_id: "opus", label: "Opus 256kbps", ext: "opus", quality: "256kbps" },
+];
 
 // Cookie Args Helper
 
@@ -202,6 +221,115 @@ export async function registerRoutes(
       const cookieArgs = getCookieArgs(platform);
 
       console.log(`[extract] Platform detected: ${platform} for URL: ${input.url}`);
+
+      // Strategy 0: Audio-first platforms (Spotify, SoundCloud, Bandcamp, YT Music)
+      if (AUDIO_PLATFORMS.includes(platform)) {
+        console.log(`[extract] Audio platform detected: ${platform}`);
+
+        if (platform === "spotify") {
+          let title = "Spotify Track";
+          let thumbnail: string | undefined;
+          let artist: string | undefined;
+          let id = "spotify";
+
+          // Helper: fetch a URL and return the body as a string
+          const fetchText = (fetchUrl: string): Promise<string> => new Promise((resolve, reject) => {
+            https.get(fetchUrl, {
+              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+            }, (res2) => {
+              // Follow redirects
+              if (res2.statusCode && res2.statusCode >= 300 && res2.statusCode < 400 && res2.headers.location) {
+                fetchText(res2.headers.location).then(resolve).catch(reject);
+                return;
+              }
+              let body = "";
+              res2.on("data", (chunk) => body += chunk);
+              res2.on("end", () => resolve(body));
+            }).on("error", reject);
+          });
+
+          // Step 1: oEmbed for title + thumbnail (fast, reliable)
+          try {
+            const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(input.url)}`;
+            const oembedBody = await fetchText(oembedUrl);
+            const oembedData = JSON.parse(oembedBody);
+
+            if (oembedData.title) title = oembedData.title;
+            if (oembedData.thumbnail_url) thumbnail = oembedData.thumbnail_url;
+            console.log(`[extract] Spotify oEmbed: title="${title}"`);
+          } catch (oembedErr) {
+            console.log(`[extract] Spotify oEmbed failed:`, oembedErr);
+          }
+
+          // Step 2: Fetch the actual Spotify track page to extract artist from HTML meta tags
+          try {
+            const cleanUrl = input.url.split("?")[0]; // Remove query params
+            const pageHtml = await fetchText(cleanUrl);
+
+            const ogDescMatch = pageHtml.match(/<meta\s+(?:property|name)="og:description"\s+content="([^"]+)"/i);
+            if (ogDescMatch) {
+              const parts = ogDescMatch[1].split("·").map((s: string) => s.trim());
+              if (parts.length >= 2 && !parts[0].toLowerCase().includes("listen")) {
+                artist = parts[0]; // FIRST part is the artist
+                console.log(`[extract] Got artist from og:description: "${artist}"`);
+              }
+            }
+
+            if (!artist) {
+              const titleMatch = pageHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+              if (titleMatch) {
+                const byMatch = titleMatch[1].match(/by\s+(.+?)(?:\s*\|)/i);
+                if (byMatch) {
+                  artist = byMatch[1].trim();
+                  console.log(`[extract] Got artist from <title>: "${artist}"`);
+                }
+              }
+            }
+
+            // Try to get track ID from URL
+            try {
+              const urlPath = new URL(input.url).pathname;
+              const segments = urlPath.split("/").filter(Boolean);
+              if (segments.length >= 2) id = segments[segments.length - 1];
+            } catch { }
+
+          } catch (pageErr) {
+            console.log(`[extract] Spotify page fetch failed:`, pageErr);
+          }
+
+          const displayTitle = artist ? `${artist} - ${title}` : title;
+          console.log(`[extract] Spotify final: "${displayTitle}"`);
+
+          return res.status(200).json({
+            id,
+            title: displayTitle,
+            thumbnail,
+            extractor: "spotify",
+            mediaType: "audio",
+            formats: [],
+            audioFormats: AUDIO_OUTPUT_FORMATS,
+            artist,
+          });
+        }
+
+        // YouTube Music, SoundCloud, Bandcamp — use yt-dlp to get metadata
+        try {
+          const ytResult = await extractWithYtDlp(input.url, cookieArgs);
+
+          return res.status(200).json({
+            id: ytResult.id,
+            title: ytResult.title,
+            thumbnail: ytResult.thumbnail,
+            extractor: ytResult.extractor || platform,
+            mediaType: "audio",
+            formats: [],
+            audioFormats: AUDIO_OUTPUT_FORMATS,
+          });
+        } catch (ytErr) {
+          console.error(`[extract] yt-dlp failed for audio platform ${platform}:`, ytErr);
+          return res.status(500).json({ message: `Failed to extract audio info from ${platform}. The URL may be invalid.` });
+        }
+      }
 
       // Strategy 1: yt-dlp only platforms (YouTube, TikTok, etc.)
       if (YTDLP_ONLY.includes(platform) || platform === "generic") {
@@ -396,6 +524,116 @@ export async function registerRoutes(
       jobs.delete(req.params.jobId);
     });
   });
+
+  // Audio Download Endpoint
+  app.post("/api/download/audio", async (req, res) => {
+    try {
+      const { url, format, title } = req.body;
+      if (!url || !format) {
+        return res.status(400).json({ message: "Missing url or format." });
+      }
+
+      const safeTitle = (title || 'audio').replace(/[^a-z0-9_\-]/gi, '_').toLowerCase();
+      const filename = `${safeTitle}.${format}`;
+
+      const jobId = crypto.randomUUID();
+      const platform = detectPlatform(url);
+      const tmpDir = os.tmpdir();
+
+      jobs.set(jobId, { status: "processing" });
+      res.status(200).json({ jobId });
+
+      const outTemplate = path.join(tmpDir, `${jobId}.%(ext)s`);
+      const cookieArgs = getCookieArgs(platform);
+
+      // Build the actual yt-dlp target URL
+      //   - Spotify: search YouTube for the track title
+      //   - Everything else: use the URL directly
+      let targetUrl: string;
+      if (platform === "spotify") {
+        // title is already "Artist - Song" from the extract endpoint
+        // Append "audio" to bias YouTube search towards music, not random videos
+        const searchQuery = `ytsearch1:${title || "unknown track"} audio`;
+        targetUrl = searchQuery;
+        console.log(`[audio-dl] Spotify detected, searching YouTube: ${searchQuery}`);
+      } else {
+        targetUrl = url;
+      }
+
+      // Format-specific ffmpeg postprocessor args for proper bitrate
+      // --audio-quality 0 = VBR best, but doesn't guarantee 320k for MP3
+      // We override with explicit CBR bitrates via postprocessor-args
+      const formatPostArgs: Record<string, string[]> = {
+        mp3: ["--postprocessor-args", "ffmpeg:-b:a 320k -ar 44100"],
+        m4a: ["--postprocessor-args", "ffmpeg:-b:a 256k"],
+        opus: ["--postprocessor-args", "ffmpeg:-b:a 256k"],
+        flac: [], // FLAC is lossless, no bitrate needed
+        wav: [], // WAV is lossless, no bitrate needed
+      };
+      const extraPostArgs = formatPostArgs[format] || [];
+
+      const args = [
+        "-x",
+        "--audio-format", format,
+        "--audio-quality", "0",
+        "--no-playlist",
+        "--socket-timeout", "30",
+        "--retries", "2",
+        ...extraPostArgs,
+        // Only embed thumbnail + metadata for direct URLs (not search queries)
+        ...(platform === "spotify" ? [] : ["--embed-thumbnail", "--add-metadata"]),
+        // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
+        ...(platform === "spotify" ? [] : cookieArgs),
+        "-o", outTemplate,
+        targetUrl
+      ];
+
+      console.log(`[audio-dl] Spawning yt-dlp:`, args.join(" "));
+      const dlProcess = spawn("yt-dlp", args);
+
+      // yt-dlp logs mostly to stdout, collect both
+      let stdoutOutput = "";
+      let stderrOutput = "";
+      dlProcess.stdout.on("data", (chunk: Buffer) => { stdoutOutput += chunk.toString(); });
+      dlProcess.stderr.on("data", (chunk: Buffer) => { stderrOutput += chunk.toString(); });
+
+      // Kill after 3 minutes to prevent infinite hangs
+      const killTimeout = setTimeout(() => {
+        dlProcess.kill("SIGKILL");
+        jobs.set(jobId, { status: "error", error: "Download timed out after 3 minutes." });
+        console.error(`[audio-dl] Job ${jobId} timed out and was killed.`);
+      }, 3 * 60 * 1000);
+
+      dlProcess.on("close", (code) => {
+        clearTimeout(killTimeout);
+
+        if (code === 0) {
+          const files = fs.readdirSync(tmpDir);
+          const downloadedFile = files.find(f => f.startsWith(jobId));
+
+          if (downloadedFile) {
+            jobs.set(jobId, {
+              status: "completed",
+              filePath: path.join(tmpDir, downloadedFile),
+              fileName: filename
+            });
+          } else {
+            console.error(`[audio-dl] File not found in tmpDir. stdout:\n${stdoutOutput}`);
+            jobs.set(jobId, { status: "error", error: "File not found after processing." });
+          }
+        } else {
+          const errMsg = (stderrOutput || stdoutOutput).trim().split("\n").slice(-5).join(" ").substring(0, 300);
+          console.error(`[audio-dl] yt-dlp failed (code ${code}). Last output:\n${errMsg}`);
+          jobs.set(jobId, { status: "error", error: `Download failed: ${errMsg || `exit code ${code}`}` });
+        }
+      });
+
+    } catch (err) {
+      console.error("Audio download error:", err);
+      res.status(500).json({ message: "Failed to start audio download." });
+    }
+  });
+
 
   // Image Proxy Download
   // Proxies image downloads through the server to avoid CORS issues

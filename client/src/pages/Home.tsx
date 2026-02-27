@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useExtract } from "@/hooks/use-downloader";
 import { FormatList } from "@/components/FormatList";
 import { ImageGallery } from "@/components/ImageGallery";
+import { AudioFormats } from "@/components/AudioFormats";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Download, Search } from "lucide-react";
@@ -149,7 +150,14 @@ export default function Home() {
                 </div>
 
                 {/* Conditionally render based on media type */}
-                {result.mediaType === "video" || !result.mediaType ? (
+                {result.mediaType === "audio" && result.audioFormats && result.audioFormats.length > 0 ? (
+                  <AudioFormats
+                    audioFormats={result.audioFormats}
+                    title={result.title}
+                    url={url}
+                    artist={result.artist}
+                  />
+                ) : result.mediaType === "video" || !result.mediaType ? (
                   <FormatList formats={result.formats} title={result.title} url={url} />
                 ) : (
                   result.images && result.images.length > 0 && (
