@@ -41,6 +41,8 @@ export const ExtractorResponseSchema = z.object({
   images: z.array(ImageSchema).optional(),
   audioFormats: z.array(AudioFormatSchema).optional(),
   artist: z.string().optional(),
+  album: z.string().optional(),
+  year: z.string().optional(),
   duration: z.number().optional(),
 });
 

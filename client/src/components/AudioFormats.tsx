@@ -10,9 +10,11 @@ interface AudioFormatsProps {
     title: string;
     url: string;
     artist?: string;
+    album?: string;
+    year?: string;
 }
 
-export function AudioFormats({ audioFormats, title, url, artist }: AudioFormatsProps) {
+export function AudioFormats({ audioFormats, title, url, artist, album, year }: AudioFormatsProps) {
     const { toast } = useToast();
     const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
 
@@ -40,7 +42,7 @@ export function AudioFormats({ audioFormats, title, url, artist }: AudioFormatsP
             const res = await fetch("/api/download/audio", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url, format, title }),
+                body: JSON.stringify({ url, format, title, artist, album, year }),
             });
             if (!res.ok) throw new Error("Failed to start audio processing");
 

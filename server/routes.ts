@@ -230,6 +230,8 @@ export async function registerRoutes(
           let title = "Spotify Track";
           let thumbnail: string | undefined;
           let artist: string | undefined;
+          let album: string | undefined;
+          let year: string | undefined;
           let id = "spotify";
 
           // Helper: fetch a URL and return the body as a string
@@ -269,9 +271,19 @@ export async function registerRoutes(
             const ogDescMatch = pageHtml.match(/<meta\s+(?:property|name)="og:description"\s+content="([^"]+)"/i);
             if (ogDescMatch) {
               const parts = ogDescMatch[1].split("·").map((s: string) => s.trim());
+              // Format: "Artist1, Artist2 · Album · Song · Year" OR "Artist · Song · Type · Year"
               if (parts.length >= 2 && !parts[0].toLowerCase().includes("listen")) {
-                artist = parts[0]; // FIRST part is the artist
+                artist = parts[0];
                 console.log(`[extract] Got artist from og:description: "${artist}"`);
+
+                // If 4 parts: [Artist, Album, Song/Type, Year]
+                if (parts.length >= 4) {
+                  album = parts[1];
+                  year = parts[3];
+                } else if (parts.length === 3) {
+                  // [Artist, Title/Album, Year]
+                  year = parts[2];
+                }
               }
             }
 
@@ -309,6 +321,8 @@ export async function registerRoutes(
             formats: [],
             audioFormats: AUDIO_OUTPUT_FORMATS,
             artist,
+            album,
+            year
           });
         }
 
@@ -528,16 +542,15 @@ export async function registerRoutes(
   // Audio Download Endpoint
   app.post("/api/download/audio", async (req, res) => {
     try {
-      const { url, format, title } = req.body;
+      const { url, format, title, artist, album, year } = req.body;
       if (!url || !format) {
         return res.status(400).json({ message: "Missing url or format." });
       }
 
-      const safeTitle = (title || 'audio').replace(/[^a-z0-9_\-]/gi, '_').toLowerCase();
-      const filename = `${safeTitle}.${format}`;
+      const platform = detectPlatform(url);
 
       const jobId = crypto.randomUUID();
-      const platform = detectPlatform(url);
+      const filename = `${(title || 'audio').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${format}`;
       const tmpDir = os.tmpdir();
 
       jobs.set(jobId, { status: "processing" });
@@ -571,6 +584,18 @@ export async function registerRoutes(
       };
       const audioQuality = qualityMap[format] || "0";
 
+      // Metadata tagging via ffmpeg postprocessor args
+      // We force our extracted Spotify metadata into the final file tags
+      const metadataArgs: string[] = [];
+      if (title || artist || album || year) {
+        let ffArgs = "ffmpeg:";
+        if (title) ffArgs += ` -metadata title=${JSON.stringify(title)}`;
+        if (artist) ffArgs += ` -metadata artist=${JSON.stringify(artist)}`;
+        if (album) ffArgs += ` -metadata album=${JSON.stringify(album)}`;
+        if (year) ffArgs += ` -metadata date=${JSON.stringify(year)}`;
+        metadataArgs.push("--postprocessor-args", ffArgs);
+      }
+
       const args = [
         "-x",
         "--audio-format", format,
@@ -578,8 +603,9 @@ export async function registerRoutes(
         "--no-playlist",
         "--socket-timeout", "30",
         "--retries", "2",
-        // Only embed thumbnail + metadata for direct URLs (not search queries)
-        ...(platform === "spotify" ? [] : ["--embed-thumbnail", "--add-metadata"]),
+        "--embed-thumbnail",
+        "--add-metadata",
+        ...metadataArgs,
         // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
         ...(platform === "spotify" ? [] : cookieArgs),
         "-o", outTemplate,

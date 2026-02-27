@@ -156,6 +156,8 @@ export default function Home() {
                     title={result.title}
                     url={url}
                     artist={result.artist}
+                    album={result.album}
+                    year={result.year}
                   />
                 ) : result.mediaType === "video" || !result.mediaType ? (
                   <FormatList formats={result.formats} title={result.title} url={url} />
