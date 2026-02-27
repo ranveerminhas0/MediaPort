@@ -584,10 +584,13 @@ export async function registerRoutes(
       };
       const audioQuality = qualityMap[format] || "0";
 
+      // Formats that support embedded thumbnails and rich metadata tags
+      const supportsRichMeta = ["mp3", "m4a", "opus"].includes(format);
+
       // Metadata tagging via ffmpeg postprocessor args
-      // We force our extracted Spotify metadata into the final file tags
+      // Only for formats that support it — WAV/FLAC will be corrupted by this
       const metadataArgs: string[] = [];
-      if (title || artist || album || year) {
+      if (supportsRichMeta && (title || artist || album || year)) {
         let ffArgs = "ffmpeg:";
         if (title) ffArgs += ` -metadata title=${JSON.stringify(title)}`;
         if (artist) ffArgs += ` -metadata artist=${JSON.stringify(artist)}`;
@@ -603,8 +606,9 @@ export async function registerRoutes(
         "--no-playlist",
         "--socket-timeout", "30",
         "--retries", "2",
-        "--embed-thumbnail",
-        "--add-metadata",
+        // Only embed thumbnail + metadata for formats that support them
+        ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
+        "--js-runtimes", "node",
         ...metadataArgs,
         // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
         ...(platform === "spotify" ? [] : cookieArgs),
@@ -631,18 +635,20 @@ export async function registerRoutes(
       dlProcess.on("close", (code) => {
         clearTimeout(killTimeout);
 
-        if (code === 0) {
-          const files = fs.readdirSync(tmpDir);
-          const downloadedFile = files.find(f => f.startsWith(jobId));
+        const files = fs.readdirSync(tmpDir);
+        const downloadedFile = files.find(f => f.startsWith(jobId));
 
+        // code 0 is success. code 1 is often a warning but the file might be fine.
+        if (code === 0 || (code === 1 && downloadedFile)) {
           if (downloadedFile) {
             jobs.set(jobId, {
               status: "completed",
               filePath: path.join(tmpDir, downloadedFile),
               fileName: filename
             });
+            if (code === 1) console.log(`[audio-dl] Job ${jobId} finished with warnings (code 1) but file exists.`);
           } else {
-            console.error(`[audio-dl] File not found in tmpDir. stdout:\n${stdoutOutput}`);
+            console.error(`[audio-dl] File not found in tmpDir after exit code ${code}. stdout:\n${stdoutOutput}`);
             jobs.set(jobId, { status: "error", error: "File not found after processing." });
           }
         } else {
