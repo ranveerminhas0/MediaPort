@@ -5,6 +5,7 @@ import { ImageGallery } from "@/components/ImageGallery";
 import { AudioFormats } from "@/components/AudioFormats";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Loader2, Download, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -24,19 +25,20 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 selection:bg-slate-900 selection:text-white">
+    <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
       <motion.nav
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="border-b border-slate-100 bg-white/80 backdrop-blur-md sticky top-0 z-50"
+        className="border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-50"
       >
         <div className="max-w-5xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 font-semibold text-xl tracking-tight">
-            <div className="w-10 h-10 bg-slate-900 flex items-center justify-center">
-              <Download className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 bg-primary flex items-center justify-center">
+              <Download className="w-5 h-5 text-primary-foreground" />
             </div>
             <span>MediaPort</span>
           </div>
+          <ThemeToggle />
         </div>
       </motion.nav>
 
@@ -47,10 +49,10 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            <h1 className="text-5xl font-bold mb-6 tracking-tighter text-slate-900 leading-tight">
+            <h1 className="text-5xl font-bold mb-6 tracking-tighter text-foreground leading-tight">
               Streamline your <br />media workflow.
             </h1>
-            <p className="text-slate-500 text-lg mb-12 max-w-md leading-relaxed">
+            <p className="text-muted-foreground text-lg mb-12 max-w-md leading-relaxed">
               Professional-grade extraction for high-quality video, audio, and image assets.
             </p>
           </motion.div>
@@ -63,14 +65,14 @@ export default function Home() {
           >
             <form onSubmit={handleExtract} className="space-y-4">
               <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                   <Search className="w-5 h-5" />
                 </div>
                 <Input
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="Paste URL to process..."
-                  className="h-16 pl-12 bg-slate-50 border-slate-200 focus:border-slate-900 focus:ring-0 rounded-none text-lg transition-all"
+                  className="h-16 pl-12 bg-muted/30 border-border focus:border-primary focus:ring-0 rounded-none text-lg transition-all"
                   disabled={isPending}
                 />
               </div>
@@ -78,7 +80,7 @@ export default function Home() {
                 size="lg"
                 type="submit"
                 disabled={isPending || !url}
-                className="w-full h-16 rounded-none bg-slate-900 hover:bg-slate-800 text-white font-medium text-lg transition-all overflow-hidden group"
+                className="w-full h-16 rounded-none bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-lg transition-all overflow-hidden group"
               >
                 <AnimatePresence mode="wait">
                   {isPending ? (
@@ -115,7 +117,7 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-              className="mt-24 border-t border-slate-100 pt-16"
+              className="mt-24 border-t border-border pt-16"
             >
               <div className="space-y-12">
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
@@ -123,7 +125,7 @@ export default function Home() {
                     <motion.div
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      className="w-full sm:w-56 aspect-video bg-slate-100 overflow-hidden shrink-0 shadow-2xl"
+                      className="w-full sm:w-56 aspect-video bg-muted overflow-hidden shrink-0 shadow-2xl"
                     >
                       <img
                         src={result.thumbnail}
@@ -136,13 +138,13 @@ export default function Home() {
                     <motion.h2
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
-                      className="text-2xl font-bold text-slate-900 mb-4 leading-tight tracking-tight"
+                      className="text-2xl font-bold text-foreground mb-4 leading-tight tracking-tight"
                     >
                       {result.title}
                     </motion.h2>
                     <button
                       onClick={handleReset}
-                      className="text-sm font-bold uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors border-b-2 border-slate-100 hover:border-slate-900 pb-1"
+                      className="text-sm font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors border-b-2 border-border hover:border-foreground pb-1"
                     >
                       New Extraction
                     </button>

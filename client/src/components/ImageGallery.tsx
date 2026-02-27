@@ -117,7 +117,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
         <div className="space-y-8">
             {/* Header */}
             <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <h3 className="text-sm font-medium uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                     {isCarousel ? (
                         <>
                             <Images className="w-4 h-4" />
@@ -135,7 +135,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                     <button
                         onClick={downloadAll}
                         disabled={downloadingAll}
-                        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter bg-slate-900 text-white px-4 py-2 hover:bg-slate-800 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter bg-primary text-primary-foreground px-4 py-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
                     >
                         {downloadingAll ? (
                             <>
@@ -162,7 +162,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                                     <motion.div
                                         initial={{ opacity: 0 }}
                                         animate={{ opacity: 1 }}
-                                        className="relative aspect-square bg-slate-50 overflow-hidden"
+                                        className="relative aspect-square bg-muted/30 overflow-hidden"
                                     >
                                         <img
                                             src={img.url}
@@ -175,7 +175,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                                             <button
                                                 onClick={() => downloadImage(img, i)}
                                                 disabled={downloadingIndex === i}
-                                                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-white hover:text-slate-200 transition-colors disabled:opacity-50"
+                                                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-white hover:text-white/80 transition-colors disabled:opacity-50"
                                             >
                                                 {downloadingIndex === i ? (
                                                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -194,15 +194,15 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                     {/* Navigation Arrows */}
                     <button
                         onClick={scrollPrev}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-background/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
                     >
-                        <ChevronLeft className="w-5 h-5 text-slate-900" />
+                        <ChevronLeft className="w-5 h-5 text-foreground" />
                     </button>
                     <button
                         onClick={scrollNext}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-background/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-background"
                     >
-                        <ChevronRight className="w-5 h-5 text-slate-900" />
+                        <ChevronRight className="w-5 h-5 text-foreground" />
                     </button>
 
                     {/* Dot Indicators */}
@@ -212,8 +212,8 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                                 key={i}
                                 onClick={() => scrollTo(i)}
                                 className={`w-2 h-2 rounded-full transition-all ${i === currentSlide
-                                        ? "bg-slate-900 w-6"
-                                        : "bg-slate-300 hover:bg-slate-400"
+                                    ? "bg-primary w-6"
+                                    : "bg-muted hover:bg-muted-foreground"
                                     }`}
                             />
                         ))}
@@ -226,7 +226,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                     animate={{ opacity: 1, scale: 1 }}
                     className="relative group"
                 >
-                    <div className="aspect-auto max-h-[500px] bg-slate-50 overflow-hidden flex items-center justify-center">
+                    <div className="aspect-auto max-h-[500px] bg-muted/30 overflow-hidden flex items-center justify-center">
                         <img
                             src={images[0].url}
                             alt={title}
@@ -234,7 +234,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                         />
                     </div>
                     {images[0].width && images[0].height && (
-                        <p className="text-xs text-slate-400 mt-2">
+                        <p className="text-xs text-muted-foreground mt-2">
                             {images[0].width} × {images[0].height}
                         </p>
                     )}
@@ -254,13 +254,13 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                             className="flex items-center justify-between py-2"
                         >
                             <div className="flex items-center gap-4">
-                                <Image className="w-4 h-4 text-slate-300" />
-                                <span className="text-sm font-medium text-slate-600">
+                                <Image className="w-4 h-4 text-muted-foreground/40" />
+                                <span className="text-sm font-medium text-foreground">
                                     {isCarousel ? `Image ${i + 1}` : "Original"}
                                     {" "}{img.ext.toUpperCase()}
                                 </span>
                                 {img.width && img.height && (
-                                    <span className="text-xs text-slate-400">
+                                    <span className="text-xs text-muted-foreground">
                                         {img.width}×{img.height}
                                     </span>
                                 )}
@@ -268,7 +268,7 @@ export function ImageGallery({ images, title }: ImageGalleryProps) {
                             <button
                                 onClick={() => downloadImage(img, i)}
                                 disabled={isProcessing}
-                                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-slate-400 hover:text-slate-900 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
                             >
                                 {isProcessing ? (
                                     <>

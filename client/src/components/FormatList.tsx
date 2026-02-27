@@ -102,7 +102,7 @@ export function FormatList({ formats, title, url }: FormatListProps) {
     <div className="space-y-12">
       {videoFormats.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-sm font-medium uppercase tracking-widest text-slate-400">Video</h3>
+          <h3 className="text-sm font-medium uppercase tracking-widest text-muted-foreground">Video</h3>
           <div className="grid gap-2">
             {videoFormats.slice(0, 5).map((f, i) => {
               const isProcessing = activeFormatId === f.format_id;
@@ -114,16 +114,16 @@ export function FormatList({ formats, title, url }: FormatListProps) {
                   className="flex items-center justify-between group py-2"
                 >
                   <div className="flex items-center gap-4">
-                    <Film className="w-4 h-4 text-slate-300" />
-                    <span className="text-sm font-medium text-slate-600">
+                    <Film className="w-4 h-4 text-muted-foreground/40" />
+                    <span className="text-sm font-medium text-foreground">
                       {f.resolution} {f.ext.toUpperCase()}
                     </span>
-                    <span className="text-xs text-slate-400">{formatSize(f.filesize)}</span>
+                    <span className="text-xs text-muted-foreground">{formatSize(f.filesize)}</span>
                   </div>
                   <button
                     onClick={() => handleDownload(f)}
                     disabled={isProcessing}
-                    className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-slate-400 hover:text-slate-900 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
                   >
                     {isProcessing ? (
                       <>
@@ -143,7 +143,7 @@ export function FormatList({ formats, title, url }: FormatListProps) {
 
       {audioFormats.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-sm font-medium uppercase tracking-widest text-slate-400">Audio</h3>
+          <h3 className="text-sm font-medium uppercase tracking-widest text-muted-foreground">Audio</h3>
           <div className="grid gap-2">
             {audioFormats.slice(0, 3).map((f, i) => (
               <motion.div
@@ -153,15 +153,15 @@ export function FormatList({ formats, title, url }: FormatListProps) {
                 className="flex items-center justify-between group py-2"
               >
                 <div className="flex items-center gap-4">
-                  <Music className="w-4 h-4 text-slate-300" />
-                  <span className="text-sm font-medium text-slate-600">
+                  <Music className="w-4 h-4 text-muted-foreground/40" />
+                  <span className="text-sm font-medium text-foreground">
                     {f.ext.toUpperCase()}
                   </span>
-                  <span className="text-xs text-slate-400">{formatSize(f.filesize)}</span>
+                  <span className="text-xs text-muted-foreground">{formatSize(f.filesize)}</span>
                 </div>
                 <button
                   onClick={() => handleDownload(f)}
-                  className="text-xs font-semibold uppercase tracking-tighter text-slate-400 hover:text-slate-900 transition-colors"
+                  className="text-xs font-semibold uppercase tracking-tighter text-muted-foreground hover:text-primary transition-colors"
                 >
                   Get
                 </button>

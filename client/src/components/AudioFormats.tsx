@@ -83,22 +83,22 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year }: 
 
     // Format quality badge colors
     const getQualityColor = (quality: string) => {
-        if (quality.includes("320")) return "text-emerald-600 bg-emerald-50";
-        if (quality.includes("256")) return "text-blue-600 bg-blue-50";
-        if (quality.includes("Lossless")) return "text-purple-600 bg-purple-50";
-        return "text-slate-500 bg-slate-50";
+        if (quality.includes("320")) return "text-emerald-500 bg-emerald-500/10";
+        if (quality.includes("256")) return "text-blue-500 bg-blue-500/10";
+        if (quality.includes("Lossless")) return "text-purple-500 bg-purple-500/10";
+        return "text-muted-foreground bg-muted";
     };
 
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-3 mb-2">
-                <Disc3 className="w-5 h-5 text-slate-400" />
-                <h3 className="text-sm font-medium uppercase tracking-widest text-slate-400">
+                <Disc3 className="w-5 h-5 text-muted-foreground" />
+                <h3 className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
                     Audio Formats
                 </h3>
             </div>
 
-            <p className="text-xs text-slate-400 -mt-2">
+            <p className="text-xs text-muted-foreground -mt-2">
                 Select your preferred audio format. Max quality: 320kbps.
             </p>
 
@@ -111,11 +111,11 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year }: 
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.05 }}
-                            className="flex items-center justify-between group py-3 px-4 hover:bg-slate-50 transition-colors"
+                            className="flex items-center justify-between group py-3 px-4 hover:bg-muted/50 transition-colors"
                         >
                             <div className="flex items-center gap-4">
-                                <Music className="w-4 h-4 text-slate-300" />
-                                <span className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+                                <Music className="w-4 h-4 text-muted-foreground/40" />
+                                <span className="text-sm font-semibold text-foreground uppercase tracking-wide">
                                     {af.ext}
                                 </span>
                                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getQualityColor(af.quality)}`}>
@@ -125,7 +125,7 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year }: 
                             <button
                                 onClick={() => handleDownload(af)}
                                 disabled={isProcessing || downloadMutation.isPending}
-                                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-slate-400 hover:text-slate-900 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
                             >
                                 {isProcessing ? (
                                     <>
