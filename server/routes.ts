@@ -18,9 +18,9 @@ const jobs = new Map<string, { status: "processing" | "completed" | "error", fil
 
 // Platform Detection
 
-type Platform = "youtube" | "youtube_music" | "instagram" | "twitter" | "pinterest" | "tiktok" | "reddit" | "tumblr" | "flickr" | "spotify" | "soundcloud" | "bandcamp" | "generic";
+export type Platform = "youtube" | "youtube_music" | "instagram" | "twitter" | "pinterest" | "tiktok" | "reddit" | "tumblr" | "flickr" | "spotify" | "soundcloud" | "bandcamp" | "generic";
 
-function detectPlatform(url: string): Platform {
+export function detectPlatform(url: string): Platform {
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace("www.", "");
 
@@ -56,7 +56,7 @@ const MIXED_PLATFORMS: Platform[] = ["instagram", "twitter"];
 const YTDLP_ONLY: Platform[] = ["youtube", "tiktok"];
 
 // Audio-first platforms
-const AUDIO_PLATFORMS: Platform[] = ["spotify", "soundcloud", "bandcamp", "youtube_music"];
+export const AUDIO_PLATFORMS: Platform[] = ["spotify", "soundcloud", "bandcamp", "youtube_music"];
 
 // Static audio output format options (capped at 320kbps)
 const AUDIO_OUTPUT_FORMATS = [
