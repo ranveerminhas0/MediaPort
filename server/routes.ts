@@ -46,7 +46,7 @@ function detectPlatform(url: string): Platform {
   }
 }
 
-// Platforms where gallery-dl is the PRIMARY tool (image-firt sites)
+// Platforms where gallery-dl is the PRIMARY tool (image-first sites)
 const GALLERY_DL_PRIMARY: Platform[] = ["pinterest", "tumblr", "flickr", "reddit"];
 
 // Platforms where we try yt-dlp first, then fall back to gallery-dl
@@ -560,26 +560,24 @@ export async function registerRoutes(
         targetUrl = url;
       }
 
-      // Format-specific ffmpeg postprocessor args for proper bitrate
-      // --audio-quality 0 = VBR best, but doesn't guarantee 320k for MP3
-      // We override with explicit CBR bitrates via postprocessor-args
-      const formatPostArgs: Record<string, string[]> = {
-        mp3: ["--postprocessor-args", "ffmpeg:-b:a 320k -ar 44100"],
-        m4a: ["--postprocessor-args", "ffmpeg:-b:a 256k"],
-        opus: ["--postprocessor-args", "ffmpeg:-b:a 256k"],
-        flac: [], // FLAC is lossless, no bitrate needed
-        wav: [], // WAV is lossless, no bitrate needed
+      // Format-specific quality values
+      // --audio-quality accepts kbps values like "320K" for CBR, or "0" for VBR best
+      const qualityMap: Record<string, string> = {
+        mp3: "320K",  // True 320kbps CBR
+        m4a: "256K",
+        opus: "256K",
+        flac: "0",     // Best quality (lossless, bitrate doesn't matter)
+        wav: "0",
       };
-      const extraPostArgs = formatPostArgs[format] || [];
+      const audioQuality = qualityMap[format] || "0";
 
       const args = [
         "-x",
         "--audio-format", format,
-        "--audio-quality", "0",
+        "--audio-quality", audioQuality,
         "--no-playlist",
         "--socket-timeout", "30",
         "--retries", "2",
-        ...extraPostArgs,
         // Only embed thumbnail + metadata for direct URLs (not search queries)
         ...(platform === "spotify" ? [] : ["--embed-thumbnail", "--add-metadata"]),
         // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
