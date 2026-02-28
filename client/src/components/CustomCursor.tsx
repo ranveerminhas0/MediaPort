@@ -13,8 +13,8 @@ export function CustomCursor() {
             for (let i = 0; i < LINE_COUNT; i++) {
                 const line = document.createElement("div");
                 line.className = "click-burst-line";
-                // Spread lines evenly around 360°, with a slight offset so they look natural
-                const angle = (360 / LINE_COUNT) * i - 30;
+                // Evenly spaced 360-degree burst
+                const angle = (360 / LINE_COUNT) * i;
                 line.style.setProperty("--angle", `${angle}deg`);
                 burst.appendChild(line);
             }

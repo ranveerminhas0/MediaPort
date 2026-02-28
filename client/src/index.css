@@ -113,9 +113,9 @@ html.dark * {
 .click-burst-line {
   position: absolute;
   top: 0;
-  left: 0;
-  width: 2.5px;
-  height: 14px;
+  left: -1px;
+  width: 2px;
+  height: 6px;
   border-radius: 2px;
   background: hsl(var(--foreground));
   transform-origin: center bottom;
@@ -130,11 +130,11 @@ html.dark * {
 
   60% {
     opacity: 1;
-    transform: rotate(var(--angle)) translateY(-18px) scaleY(1);
+    transform: rotate(var(--angle)) translateY(-10px) scaleY(1);
   }
 
   100% {
     opacity: 0;
-    transform: rotate(var(--angle)) translateY(-26px) scaleY(0.3);
+    transform: rotate(var(--angle)) translateY(-16px) scaleY(0.3);
   }
 }
