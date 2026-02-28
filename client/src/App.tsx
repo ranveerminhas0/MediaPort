@@ -15,10 +15,12 @@ function Router() {
 }
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { CustomCursor } from "@/components/CustomCursor";
 
 function App() {
   return (
     <ThemeProvider defaultTheme="light" attribute="class">
+      <CustomCursor />
       <QueryClientProvider client={queryClient}>
         <Toaster />
         <Router />

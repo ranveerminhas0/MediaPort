@@ -81,8 +81,60 @@
   }
 }
 
+/* ─── Custom cursor: overrides ALL cursor types globally ─── */
+
+/* Light-mode cursor: black fill, white stroke */
+html,
+html * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' stroke='%23FFF' stroke-width='2' d='M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.35Z'/%3E%3C/svg%3E") 5 3, auto !important;
+}
+
+/* Dark-mode cursor: white fill, black stroke */
+html.dark,
+html.dark * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23FFF' stroke='%23000' stroke-width='2' d='M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L6.35 2.85a.5.5 0 0 0-.85.35Z'/%3E%3C/svg%3E") 5 3, auto !important;
+}
+
 @layer utilities {
   .glass-card {
     @apply border border-slate-100 shadow-sm bg-white;
+  }
+}
+
+/* ─── Click-burst animation ─── */
+.click-burst {
+  position: fixed;
+  pointer-events: none;
+  z-index: 99999;
+  width: 0;
+  height: 0;
+}
+
+.click-burst-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.5px;
+  height: 14px;
+  border-radius: 2px;
+  background: hsl(var(--foreground));
+  transform-origin: center bottom;
+  animation: burst-out 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes burst-out {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateY(0px) scaleY(0.4);
+  }
+
+  60% {
+    opacity: 1;
+    transform: rotate(var(--angle)) translateY(-18px) scaleY(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(var(--angle)) translateY(-26px) scaleY(0.3);
   }
 }
