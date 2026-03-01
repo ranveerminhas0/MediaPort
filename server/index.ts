@@ -59,8 +59,13 @@ app.use((req, res, next) => {
   next();
 });
 
+import { registerAppleMusicRoutes } from "./routes/appleMusicRoutes";
+
 (async () => {
   await registerRoutes(httpServer, app);
+
+  // Register Apple Music recording routes (WASAPI loopback + WebSocket progress)
+  registerAppleMusicRoutes(app, httpServer);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

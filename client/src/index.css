@@ -81,7 +81,7 @@
   }
 }
 
-/* ─── Custom cursor: overrides ALL cursor types globally ─── */
+/* Custom cursor: overrides ALL cursor types globally */
 
 /* Light-mode cursor: black fill, white stroke */
 html,
@@ -101,7 +101,7 @@ html.dark * {
   }
 }
 
-/* ─── Click-burst animation ─── */
+/* Click-burst animation */
 .click-burst {
   position: fixed;
   pointer-events: none;
@@ -136,5 +136,15 @@ html.dark * {
   100% {
     opacity: 0;
     transform: rotate(var(--angle)) translateY(-16px) scaleY(0.3);
+  }
+}
+
+/* Apple Music FLAC lossless recording progress bar shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }

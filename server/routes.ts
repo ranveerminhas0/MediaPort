@@ -18,13 +18,14 @@ const jobs = new Map<string, { status: "processing" | "completed" | "error", fil
 
 // Platform Detection
 
-export type Platform = "youtube" | "youtube_music" | "instagram" | "twitter" | "pinterest" | "tiktok" | "reddit" | "tumblr" | "flickr" | "spotify" | "soundcloud" | "bandcamp" | "generic";
+export type Platform = "youtube" | "youtube_music" | "instagram" | "twitter" | "pinterest" | "tiktok" | "reddit" | "tumblr" | "flickr" | "spotify" | "soundcloud" | "bandcamp" | "apple_music" | "generic";
 
 export function detectPlatform(url: string): Platform {
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace("www.", "");
 
     // Audio-first platforms (check before generic youtube)
+    if (hostname.includes("music.apple.com")) return "apple_music";
     if (hostname.includes("open.spotify.com") || hostname.includes("spotify.com")) return "spotify";
     if (hostname.includes("soundcloud.com")) return "soundcloud";
     if (hostname.includes("bandcamp.com")) return "bandcamp";
@@ -56,7 +57,7 @@ const MIXED_PLATFORMS: Platform[] = ["instagram", "twitter"];
 const YTDLP_ONLY: Platform[] = ["youtube", "tiktok"];
 
 // Audio-first platforms
-export const AUDIO_PLATFORMS: Platform[] = ["spotify", "soundcloud", "bandcamp", "youtube_music"];
+export const AUDIO_PLATFORMS: Platform[] = ["spotify", "soundcloud", "bandcamp", "youtube_music", "apple_music"];
 
 // Static audio output format options (capped at 320kbps)
 const AUDIO_OUTPUT_FORMATS = [
@@ -222,9 +223,55 @@ export async function registerRoutes(
 
       console.log(`[extract] Platform detected: ${platform} for URL: ${input.url}`);
 
-      // Strategy 0: Audio-first platforms (Spotify, SoundCloud, Bandcamp, YT Music)
+      // Strategy 0: Audio-first platforms (Spotify, SoundCloud, Bandcamp, YT Music, Apple Music)
       if (AUDIO_PLATFORMS.includes(platform)) {
         console.log(`[extract] Audio platform detected: ${platform}`);
+
+        // Apple Music — return metadata with special FLAC lossless option
+        if (platform === "apple_music") {
+          console.log(`[extract] Apple Music detected, fetching metadata...`);
+
+          let title = "Apple Music Track";
+          let thumbnail: string | undefined;
+          let artist: string | undefined;
+          let album: string | undefined;
+          let duration: number | undefined;
+          let id = "apple_music";
+
+          try {
+            const { getTrackMetadata } = await import("./services/appleMusicService");
+            const metadata = await getTrackMetadata(input.url);
+            title = metadata.title;
+            artist = metadata.artist;
+            album = metadata.album;
+            thumbnail = metadata.thumbnail;
+            duration = metadata.durationSec;
+            id = `am_${title.replace(/\s+/g, "_").substring(0, 30)}`;
+          } catch (err) {
+            console.error("[extract] Apple Music metadata failed:", err);
+          }
+
+          const displayTitle = artist && artist !== "Unknown Artist" ? `${artist} - ${title}` : title;
+
+          // Apple Music specific audio formats — includes true FLAC lossless
+          const appleMusicFormats = [
+            ...AUDIO_OUTPUT_FORMATS,
+            { format_id: "apple_flac_lossless", label: "FLAC Lossless (Apple Music)", ext: "flac", quality: "Lossless 48kHz/24-bit" },
+          ];
+
+          return res.status(200).json({
+            id,
+            title: displayTitle,
+            thumbnail,
+            extractor: "apple_music",
+            mediaType: "audio",
+            formats: [],
+            audioFormats: appleMusicFormats,
+            artist,
+            album,
+            duration,
+          });
+        }
 
         if (platform === "spotify") {
           let title = "Spotify Track";
@@ -547,7 +594,17 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Missing url or format." });
       }
 
+      // Guard: apple_flac_lossless uses its own dedicated recording pipeline
+      if (format === "apple_flac_lossless") {
+        return res.status(400).json({ message: "FLAC Lossless uses the Apple Music recording pipeline. Use /api/applemusic/record instead." });
+      }
+
       const platform = detectPlatform(url);
+
+      // Guard: yt-dlp does not support Apple Music URLs at all
+      if (platform === "apple_music") {
+        return res.status(400).json({ message: "Apple Music URLs are not supported by the standard audio download pipeline. Use the FLAC Lossless option." });
+      }
 
       const jobId = crypto.randomUUID();
       const filename = `${(title || 'audio').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${format}`;

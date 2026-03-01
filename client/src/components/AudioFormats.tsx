@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { AppleMusicProcessingModal } from "./AppleMusicProcessingModal";
 
 interface AudioFormatsProps {
     audioFormats: AudioFormat[];
@@ -12,11 +13,17 @@ interface AudioFormatsProps {
     artist?: string;
     album?: string;
     year?: string;
+    extractor?: string;
+    thumbnail?: string;
+    duration?: number;
 }
 
-export function AudioFormats({ audioFormats, title, url, artist, album, year }: AudioFormatsProps) {
+export function AudioFormats({ audioFormats, title, url, artist, album, year, extractor, thumbnail, duration }: AudioFormatsProps) {
     const { toast } = useToast();
     const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
+
+    // Apple Music FLAC lossless modal state
+    const [appleMusicModalOpen, setAppleMusicModalOpen] = useState(false);
 
     const checkStatus = async (jobId: string) => {
         while (true) {
@@ -78,6 +85,12 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year }: 
     });
 
     const handleDownload = (format: AudioFormat) => {
+        // If this is the Apple Music FLAC lossless option, open the special modal
+        if (format.format_id === "apple_flac_lossless") {
+            setAppleMusicModalOpen(true);
+            return;
+        }
+
         downloadMutation.mutate({ format: format.format_id });
     };
 
@@ -85,9 +98,13 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year }: 
     const getQualityColor = (quality: string) => {
         if (quality.includes("320")) return "text-emerald-500 bg-emerald-500/10";
         if (quality.includes("256")) return "text-blue-500 bg-blue-500/10";
-        if (quality.includes("Lossless")) return "text-purple-500 bg-purple-500/10";
+        if (quality.includes("Lossless")) return "text-amber-500 bg-amber-500/10";
+        if (quality.includes("~320")) return "text-purple-500 bg-purple-500/10";
         return "text-muted-foreground bg-muted";
     };
+
+    // Check if this is Apple Music
+    const isAppleMusic = extractor === "apple_music";
 
     return (
         <div className="space-y-6">
@@ -99,47 +116,74 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year }: 
             </div>
 
             <p className="text-xs text-muted-foreground -mt-2">
-                Select your preferred audio format. Max quality: 320kbps.
+                {isAppleMusic
+                    ? "Select your preferred format. FLAC Lossless records directly from Apple Music in real-time."
+                    : "Select your preferred audio format. Max quality: 320kbps."
+                }
             </p>
 
             <div className="grid gap-2">
-                {audioFormats.map((af, i) => {
-                    const isProcessing = activeFormatId === af.format_id;
-                    return (
-                        <motion.div
-                            key={`${af.format_id}-${i}`}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: i * 0.05 }}
-                            className="flex items-center justify-between group py-3 px-4 hover:bg-muted/50 transition-colors"
-                        >
-                            <div className="flex items-center gap-4">
-                                <Music className="w-4 h-4 text-muted-foreground/40" />
-                                <span className="text-sm font-semibold text-foreground uppercase tracking-wide">
-                                    {af.ext}
-                                </span>
-                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getQualityColor(af.quality)}`}>
-                                    {af.quality}
-                                </span>
-                            </div>
-                            <button
-                                onClick={() => handleDownload(af)}
-                                disabled={isProcessing || downloadMutation.isPending}
-                                className="flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                {audioFormats
+                    .filter(af => !isAppleMusic || af.format_id === "apple_flac_lossless")
+                    .map((af, i) => {
+                        const isProcessing = activeFormatId === af.format_id;
+                        const isAppleFLAC = af.format_id === "apple_flac_lossless";
+                        return (
+                            <motion.div
+                                key={`${af.format_id}-${i}`}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.05 }}
+                                className={`flex items-center justify-between group py-3 px-4 hover:bg-muted/50 transition-colors ${isAppleFLAC ? "border border-amber-500/20 bg-amber-500/5" : ""
+                                    }`}
                             >
-                                {isProcessing ? (
-                                    <>
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                        Processing...
-                                    </>
-                                ) : (
-                                    "Get"
-                                )}
-                            </button>
-                        </motion.div>
-                    );
-                })}
+                                <div className="flex items-center gap-4">
+                                    <Music className={`w-4 h-4 ${isAppleFLAC ? "text-amber-500/60" : "text-muted-foreground/40"}`} />
+                                    <span className={`text-sm font-semibold uppercase tracking-wide ${isAppleFLAC ? "text-amber-500" : "text-foreground"}`}>
+                                        {isAppleFLAC ? "FLAC ✦" : af.ext}
+                                    </span>
+                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getQualityColor(af.quality)}`}>
+                                        {af.quality}
+                                    </span>
+                                    {isAppleFLAC && (
+                                        <span className="text-[10px] uppercase tracking-wider text-amber-500/60 font-medium">
+                                            Real-time
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => handleDownload(af)}
+                                    disabled={isProcessing || downloadMutation.isPending}
+                                    className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter transition-colors disabled:opacity-50 ${isAppleFLAC
+                                        ? "text-amber-500 hover:text-amber-400"
+                                        : "text-muted-foreground hover:text-primary"
+                                        }`}
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        "Get"
+                                    )}
+                                </button>
+                            </motion.div>
+                        );
+                    })}
             </div>
+
+            {/* Apple Music FLAC Lossless Processing Modal */}
+            <AppleMusicProcessingModal
+                open={appleMusicModalOpen}
+                onClose={() => setAppleMusicModalOpen(false)}
+                url={url}
+                title={title}
+                artist={artist}
+                album={album}
+                thumbnail={thumbnail}
+                durationSec={duration}
+            />
         </div>
     );
 }
