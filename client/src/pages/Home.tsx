@@ -3,6 +3,7 @@ import { useExtract } from "@/hooks/use-downloader";
 import { FormatList } from "@/components/FormatList";
 import { ImageGallery } from "@/components/ImageGallery";
 import { AudioFormats } from "@/components/AudioFormats";
+import { PlaylistTracks } from "@/components/PlaylistTracks";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -152,7 +153,12 @@ export default function Home() {
                 </div>
 
                 {/* Conditionally render based on media type */}
-                {result.mediaType === "audio" && result.audioFormats && result.audioFormats.length > 0 ? (
+                {result.mediaType === "playlist" && result.tracks && result.tracks.length > 0 ? (
+                  <PlaylistTracks
+                    tracks={result.tracks}
+                    playlistTitle={result.title}
+                  />
+                ) : result.mediaType === "audio" && result.audioFormats && result.audioFormats.length > 0 ? (
                   <AudioFormats
                     audioFormats={result.audioFormats}
                     title={result.title}

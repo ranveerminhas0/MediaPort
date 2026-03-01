@@ -274,103 +274,241 @@ export async function registerRoutes(
         }
 
         if (platform === "spotify") {
-          let title = "Spotify Track";
+          let title = "Spotify Audio";
           let thumbnail: string | undefined;
           let artist: string | undefined;
           let album: string | undefined;
           let year: string | undefined;
           let id = "spotify";
 
-          // Helper: fetch a URL and return the body as a string
-          const fetchText = (fetchUrl: string): Promise<string> => new Promise((resolve, reject) => {
-            https.get(fetchUrl, {
-              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-            }, (res2) => {
-              // Follow redirects
-              if (res2.statusCode && res2.statusCode >= 300 && res2.statusCode < 400 && res2.headers.location) {
-                fetchText(res2.headers.location).then(resolve).catch(reject);
-                return;
+          try {
+            console.log(`[extract] Fetching Spotify data for: ${input.url}`);
+
+            // Parse URL to get type and ID
+            const urlObj = new URL(input.url);
+            const pathParts = urlObj.pathname.split('/').filter(Boolean);
+            const type = pathParts[0]; // 'playlist', 'album', or 'track'
+            id = pathParts[1] || id;
+
+            // Step 1: Fetch embed page and parse track data directly from HTML
+            console.log(`[extract] Fetching Spotify embed page for ${type}/${id}...`);
+            const embedUrl = `https://open.spotify.com/embed/${type}/${id}`;
+            const embedRes = await fetch(embedUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
               }
-              let body = "";
-              res2.on("data", (chunk) => body += chunk);
-              res2.on("end", () => resolve(body));
-            }).on("error", reject);
-          });
+            });
+            const embedHtml = await embedRes.text();
 
-          // Step 1: oEmbed for title + thumbnail (fast, reliable)
-          try {
-            const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(input.url)}`;
-            const oembedBody = await fetchText(oembedUrl);
-            const oembedData = JSON.parse(oembedBody);
+            // Parse the __NEXT_DATA__ script to extract entity data
+            let entity: any = null;
+            const nextMatch = embedHtml.match(/<script\s+id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+            if (nextMatch) {
+              try {
+                const nextData = JSON.parse(nextMatch[1]);
+                entity = nextData?.props?.pageProps?.state?.data?.entity;
+              } catch (e) { /* parse error */ }
+            }
+            if (!entity) {
+              // Try initial-state (base64)
+              const stateMatch = embedHtml.match(/<script\s+id="initial-state"[^>]*>([^<]+)<\/script>/);
+              if (stateMatch) {
+                try {
+                  const decoded = JSON.parse(Buffer.from(stateMatch[1], 'base64').toString());
+                  entity = decoded?.data?.entity;
+                } catch (e) { /* parse error */ }
+              }
+            }
+            if (!entity) {
+              // Try resource (base64)
+              const resMatch = embedHtml.match(/<script\s+id="resource"[^>]*>([^<]+)<\/script>/);
+              if (resMatch) {
+                try { entity = JSON.parse(Buffer.from(resMatch[1], 'base64').toString()); } catch (e) { }
+              }
+            }
 
-            if (oembedData.title) title = oembedData.title;
-            if (oembedData.thumbnail_url) thumbnail = oembedData.thumbnail_url;
-            console.log(`[extract] Spotify oEmbed: title="${title}"`);
-          } catch (oembedErr) {
-            console.log(`[extract] Spotify oEmbed failed:`, oembedErr);
-          }
+            if (!entity) throw new Error("Could not parse Spotify embed page data.");
 
-          // Step 2: Fetch the actual Spotify track page to extract artist from HTML meta tags
-          try {
-            const cleanUrl = input.url.split("?")[0]; // Remove query params
-            const pageHtml = await fetchText(cleanUrl);
+            // Extract metadata
+            title = entity.name || title;
+            thumbnail = entity.coverArt?.sources?.[0]?.url || entity.images?.[0]?.url || thumbnail;
+            artist = entity.subtitle || entity.artists?.map((a: any) => a.name).join(", ") || artist;
+            if (entity.releaseDate) year = String(entity.releaseDate.isoString || entity.releaseDate).split("-")[0];
 
-            const ogDescMatch = pageHtml.match(/<meta\s+(?:property|name)="og:description"\s+content="([^"]+)"/i);
-            if (ogDescMatch) {
-              const parts = ogDescMatch[1].split("·").map((s: string) => s.trim());
-              // Format: "Artist1, Artist2 · Album · Song · Year" OR "Artist · Song · Type · Year"
-              if (parts.length >= 2 && !parts[0].toLowerCase().includes("listen")) {
-                artist = parts[0];
-                console.log(`[extract] Got artist from og:description: "${artist}"`);
+            // Handle single tracks
+            if (entity.type === 'track' || type === 'track') {
+              return res.status(200).json({
+                id, title: artist ? `${artist} - ${title}` : title,
+                thumbnail, extractor: "spotify", mediaType: "audio",
+                formats: [], audioFormats: AUDIO_OUTPUT_FORMATS,
+                artist, album, year
+              });
+            }
 
-                // If 4 parts: [Artist, Album, Song/Type, Year]
-                if (parts.length >= 4) {
-                  album = parts[1];
-                  year = parts[3];
-                } else if (parts.length === 3) {
-                  // [Artist, Title/Album, Year]
-                  year = parts[2];
+            // Handle playlists and albums — extract tracks from embed HTML
+            const embedTracks: any[] = [];
+            if (entity.trackList) {
+              for (let i = 0; i < entity.trackList.length; i++) {
+                const item = entity.trackList[i];
+                if (item && item.title) {
+                  const trackId = item.uri ? String(item.uri).split(':').pop() : `${id}_track_${i}`;
+                  embedTracks.push({
+                    id: trackId || `${id}_track_${i}`,
+                    title: item.title,
+                    artist: item.subtitle || artist,
+                    album: undefined, thumbnail,
+                    duration: item.duration ? Math.floor(Number(item.duration) / 1000) : undefined,
+                    url: item.uri ? `https://open.spotify.com/track/${trackId}` : undefined
+                  });
                 }
               }
             }
 
-            if (!artist) {
-              const titleMatch = pageHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
-              if (titleMatch) {
-                const byMatch = titleMatch[1].match(/by\s+(.+?)(?:\s*\|)/i);
-                if (byMatch) {
-                  artist = byMatch[1].trim();
-                  console.log(`[extract] Got artist from <title>: "${artist}"`);
-                }
-              }
+            const totalInPlaylist = entity.trackCount || entity.tracks?.total || embedTracks.length;
+            console.log(`[extract] Embed page returned ${embedTracks.length} tracks. Playlist has ${totalInPlaylist} total.`);
+
+            // If we got all tracks from embed, return immediately (fck spotify api)
+            if (embedTracks.length >= totalInPlaylist || totalInPlaylist <= 100) {
+              console.log(`[extract] All ${embedTracks.length} tracks extracted from embed page.`);
+              return res.status(200).json({
+                id, title, thumbnail, extractor: "spotify", mediaType: "playlist",
+                formats: [], audioFormats: AUDIO_OUTPUT_FORMATS,
+                tracks: embedTracks, artist, album: entity.type === 'album' ? title : undefined, year
+              });
             }
 
-            // Try to get track ID from URL
+            // Step 2: Playlist has 100+ tracks — use Puppeteer to scrape the full page
+            console.log(`[extract] Playlist has ${totalInPlaylist} tracks (embed only has ${embedTracks.length}). Launching browser scraper...`);
+            const puppeteer = await import('puppeteer');
+            const browser = await puppeteer.default.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+            });
+
             try {
-              const urlPath = new URL(input.url).pathname;
-              const segments = urlPath.split("/").filter(Boolean);
-              if (segments.length >= 2) id = segments[segments.length - 1];
-            } catch { }
+              const page = await browser.newPage();
+              await page.setViewport({ width: 1280, height: 900 });
+              await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-          } catch (pageErr) {
-            console.log(`[extract] Spotify page fetch failed:`, pageErr);
+              // Load environment for cookie
+              const dotenv = (await import('dotenv')).default;
+              dotenv.config();
+              const spDcCookie = process.env.SPOTIFY_DC;
+              if (spDcCookie) {
+                await page.setCookie({
+                  name: 'sp_dc',
+                  value: spDcCookie,
+                  domain: '.spotify.com',
+                  path: '/',
+                  httpOnly: true,
+                  secure: true
+                });
+              }
+
+              await page.goto(`https://open.spotify.com/${type}/${id}`, {
+                waitUntil: 'domcontentloaded',
+                timeout: 30000
+              });
+
+              // Wait for track rows to appear
+              await page.waitForSelector('div[data-testid="tracklist-row"]', { timeout: 15000 })
+                .catch(() => console.log("[extract] Timeout waiting for tracklist rows, continuing..."));
+
+              // Scroll to load all tracks
+              console.log("[extract] Scrolling to load all tracks...");
+              const allTracks = await page.evaluate(async (totalExpected: number) => {
+                const tracks = new Map();
+                const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+                let lastHeight = 0;
+                let staleCount = 0;
+
+                for (let i = 0; i < 150; i++) {
+                  const rows = document.querySelectorAll('div[data-testid="tracklist-row"]');
+                  rows.forEach((row) => {
+                    const titleAnchor = row.querySelector('a[href*="/track/"]') as HTMLAnchorElement;
+                    if (!titleAnchor) return;
+
+                    const trackUrl = titleAnchor.href;
+                    const idMatch = trackUrl.match(/\/track\/([a-zA-Z0-9]+)/);
+                    const trackId = idMatch ? idMatch[1] : trackUrl;
+                    if (tracks.has(trackId)) return;
+
+                    const titleText = titleAnchor.innerText || 'Unknown';
+                    const artistEls = Array.from(row.querySelectorAll('a[href*="/artist/"]')) as HTMLElement[];
+                    const artistText = artistEls.map(a => a.innerText).join(', ') || 'Unknown';
+                    const albumEl = row.querySelector('a[href*="/album/"]') as HTMLElement;
+                    const albumText = albumEl?.innerText;
+                    const imgEl = row.querySelector('img') as HTMLImageElement;
+
+                    // Duration from the last div with a colon
+                    let duration: number | undefined;
+                    const divs = Array.from(row.querySelectorAll('div[dir="auto"]')) as HTMLElement[];
+                    for (const d of divs) {
+                      const t = d.innerText;
+                      if (t && /^\d+:\d+$/.test(t.trim())) {
+                        const [m, s] = t.trim().split(':').map(Number);
+                        duration = m * 60 + s;
+                      }
+                    }
+
+                    tracks.set(trackId, {
+                      id: trackId,
+                      title: titleText,
+                      artist: artistText,
+                      album: albumText,
+                      thumbnail: imgEl?.src,
+                      duration,
+                      url: `https://open.spotify.com/track/${trackId}`
+                    });
+                  });
+
+                  if (tracks.size >= totalExpected) break;
+
+                  window.scrollBy(0, 800);
+                  await delay(400);
+
+                  const newHeight = document.body.scrollHeight;
+                  if (newHeight === lastHeight) {
+                    staleCount++;
+                    if (staleCount >= 5) break;
+                  } else {
+                    staleCount = 0;
+                  }
+                  lastHeight = newHeight;
+                }
+
+                return Array.from(tracks.values());
+              }, totalInPlaylist);
+
+              await browser.close();
+
+              console.log(`[extract] Puppeteer scraped ${allTracks.length} tracks from "${title}".`);
+
+              // Use Puppeteer tracks if we got more, otherwise fallback to embed
+              const finalTracks = allTracks.length > embedTracks.length ? allTracks : embedTracks;
+
+              return res.status(200).json({
+                id, title, thumbnail, extractor: "spotify", mediaType: "playlist",
+                formats: [], audioFormats: AUDIO_OUTPUT_FORMATS,
+                tracks: finalTracks, artist, album: entity.type === 'album' ? title : undefined, year
+              });
+
+            } catch (puppeteerErr) {
+              await browser.close().catch(() => { });
+              console.error("[extract] Puppeteer scraping failed:", puppeteerErr);
+              // Return whatever we got from embed
+              return res.status(200).json({
+                id, title, thumbnail, extractor: "spotify", mediaType: "playlist",
+                formats: [], audioFormats: AUDIO_OUTPUT_FORMATS,
+                tracks: embedTracks, artist, album: entity.type === 'album' ? title : undefined, year
+              });
+            }
+
+          } catch (spotifyErr) {
+            console.error(`[extract] Spotify API failed:`, spotifyErr);
+            return res.status(500).json({ message: "Failed to fetch Spotify information." });
           }
-
-          const displayTitle = artist ? `${artist} - ${title}` : title;
-          console.log(`[extract] Spotify final: "${displayTitle}"`);
-
-          return res.status(200).json({
-            id,
-            title: displayTitle,
-            thumbnail,
-            extractor: "spotify",
-            mediaType: "audio",
-            formats: [],
-            audioFormats: AUDIO_OUTPUT_FORMATS,
-            artist,
-            album,
-            year
-          });
         }
 
         // YouTube Music, SoundCloud, Bandcamp — use yt-dlp to get metadata

@@ -24,6 +24,16 @@ export const ImageSchema = z.object({
   ext: z.string(),
 });
 
+export const TrackItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  artist: z.string().optional(),
+  album: z.string().optional(),
+  thumbnail: z.string().optional(),
+  duration: z.number().optional(),
+  url: z.string().optional(),
+});
+
 export const AudioFormatSchema = z.object({
   format_id: z.string(),  // e.g. "mp3", "m4a", "wav", "flac"
   label: z.string(),       // e.g. "MP3 320kbps"
@@ -36,10 +46,11 @@ export const ExtractorResponseSchema = z.object({
   title: z.string(),
   thumbnail: z.string().optional(),
   extractor: z.string().optional(),
-  mediaType: z.enum(["video", "image", "gallery", "audio"]).default("video"),
+  mediaType: z.enum(["video", "image", "gallery", "audio", "playlist"]).default("video"),
   formats: z.array(FormatSchema),
   images: z.array(ImageSchema).optional(),
   audioFormats: z.array(AudioFormatSchema).optional(),
+  tracks: z.array(TrackItemSchema).optional(),
   artist: z.string().optional(),
   album: z.string().optional(),
   year: z.string().optional(),
@@ -74,5 +85,6 @@ export function buildUrl(path: string, params?: Record<string, string | number>)
 export type ExtractorResponse = z.infer<typeof ExtractorResponseSchema>;
 export type Format = z.infer<typeof FormatSchema>;
 export type ImageItem = z.infer<typeof ImageSchema>;
+export type TrackItem = z.infer<typeof TrackItemSchema>;
 export type AudioFormat = z.infer<typeof AudioFormatSchema>;
 export type ExtractInput = z.infer<typeof api.extract.input>;
