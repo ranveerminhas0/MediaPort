@@ -447,6 +447,13 @@ export async function registerRoutes(
 
                     const trackUrl = titleAnchor.href;
                     const trackId = trackUrl.split('/track/')[1]?.split('?')[0] || trackUrl;
+
+                    // Filter: Only include tracks that have a valid numeric index in the first column.
+                    // Legit playlist tracks have 1, 2, 3... Recommended tracks do not.
+                    const indexEl = row.querySelector('[aria-colindex="1"]') as HTMLElement;
+                    const indexText = indexEl?.innerText?.trim() || "";
+                    if (!/^\d+$/.test(indexText)) return; // Skip if not a number
+
                     const titleText = titleAnchor.innerText || 'Unknown';
                     const artistEls = Array.from(row.querySelectorAll('a[href*="/artist/"]')) as HTMLElement[];
                     const artistText = artistEls.map(a => a.innerText).join(', ') || 'Unknown';
@@ -466,6 +473,7 @@ export async function registerRoutes(
                     }
 
                     results.push({
+                      index: indexText,
                       id: trackId,
                       title: titleText,
                       artist: artistText,
@@ -479,7 +487,8 @@ export async function registerRoutes(
                 });
 
                 pageTracks.forEach((t: any) => {
-                  if (!allTracksMap.has(t.id)) allTracksMap.set(t.id, t);
+                  const compositeKey = `${t.index}_${t.id}`;
+                  if (!allTracksMap.has(compositeKey)) allTracksMap.set(compositeKey, t);
                 });
 
                 if (allTracksMap.size >= targetCount) break;
