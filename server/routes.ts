@@ -364,12 +364,13 @@ export async function registerRoutes(
               }
             }
 
-            const totalInPlaylist = entity.trackCount || entity.tracks?.total || embedTracks.length;
-            console.log(`[extract] Embed page returned ${embedTracks.length} tracks. Playlist has ${totalInPlaylist} total.`);
+            const totalInPlaylist = entity.trackCount || entity.tracks?.total || 0;
+            console.log(`[extract] Embed page returned ${embedTracks.length} tracks. Total predicted: ${totalInPlaylist || 'Unknown'}`);
 
-            // If we got all tracks from embed, return immediately (fck spotify api)
-            if (embedTracks.length >= totalInPlaylist || totalInPlaylist <= 100) {
-              console.log(`[extract] All ${embedTracks.length} tracks extracted from embed page.`);
+            // If we have a reliable total count and we met it, OR if it's less than 100 (not truncated), return now.
+            // If we see exactly 100, we MUST assume there are more and run the scraper. (Spotify Piece of Shit)
+            if ((totalInPlaylist > 0 && embedTracks.length >= totalInPlaylist) || (embedTracks.length < 100)) {
+              console.log(`[extract] All ${embedTracks.length} tracks extracted from embed page (fast path).`);
               return res.status(200).json({
                 id, title, thumbnail, extractor: "spotify", mediaType: "playlist",
                 formats: [], audioFormats: AUDIO_OUTPUT_FORMATS,
@@ -377,8 +378,9 @@ export async function registerRoutes(
               });
             }
 
-            // Step 2: Playlist has 100+ tracks — use Puppeteer to scrape the full page
-            console.log(`[extract] Playlist has ${totalInPlaylist} tracks (embed only has ${embedTracks.length}). Launching browser scraper...`);
+            // Step 2: Playlist is likely larger — use Puppeteer to scrape the full page
+            const scrollLimit = totalInPlaylist > 0 ? totalInPlaylist : 5000; // Use 5000 as a safe upper bound if unknown
+            console.log(`[extract] Playlist is large (${embedTracks.length}+ tracks). Launching browser scraper (target: ${totalInPlaylist || 'END'})...`);
             const puppeteer = await import('puppeteer');
             const browser = await puppeteer.default.launch({
               headless: true,
@@ -414,26 +416,37 @@ export async function registerRoutes(
               await page.waitForSelector('div[data-testid="tracklist-row"]', { timeout: 15000 })
                 .catch(() => console.log("[extract] Timeout waiting for tracklist rows, continuing..."));
 
-              // Scroll to load all tracks
-              console.log("[extract] Scrolling to load all tracks...");
-              const allTracks = await page.evaluate(async (totalExpected: number) => {
-                const tracks = new Map();
-                const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+              // Detect total count from header specifically to avoid sidebar metrics like "Liked Songs"
+              const detectedTotal = await page.evaluate(() => {
+                const header = (document.querySelector('[data-testid="playlist-page"] header') ||
+                  document.querySelector('div[role="contentinfo"]') ||
+                  document.body) as HTMLElement;
+                const match = header.innerText.match(/(\d{1,4})\s+songs/i);
+                return match ? parseInt(match[1]) : 0;
+              });
 
-                let lastHeight = 0;
-                let staleCount = 0;
+              const targetCount = detectedTotal > 0 ? detectedTotal : (totalInPlaylist > 0 ? totalInPlaylist : 300);
+              console.log(`[extract] Target track count identified: ${targetCount}`);
 
-                for (let i = 0; i < 150; i++) {
+              // Collection Loop
+              const allTracksMap = new Map();
+
+              // Move mouse to center of page to ensure scroll events target the right pane
+              await page.mouse.move(800, 500);
+
+              let lastTotal = 0;
+              let staleCycles = 0;
+
+              for (let i = 0; i < 150; i++) {
+                const pageTracks = await page.evaluate(() => {
                   const rows = document.querySelectorAll('div[data-testid="tracklist-row"]');
+                  const results: any[] = [];
                   rows.forEach((row) => {
                     const titleAnchor = row.querySelector('a[href*="/track/"]') as HTMLAnchorElement;
                     if (!titleAnchor) return;
 
                     const trackUrl = titleAnchor.href;
-                    const idMatch = trackUrl.match(/\/track\/([a-zA-Z0-9]+)/);
-                    const trackId = idMatch ? idMatch[1] : trackUrl;
-                    if (tracks.has(trackId)) return;
-
+                    const trackId = trackUrl.split('/track/')[1]?.split('?')[0] || trackUrl;
                     const titleText = titleAnchor.innerText || 'Unknown';
                     const artistEls = Array.from(row.querySelectorAll('a[href*="/artist/"]')) as HTMLElement[];
                     const artistText = artistEls.map(a => a.innerText).join(', ') || 'Unknown';
@@ -452,7 +465,7 @@ export async function registerRoutes(
                       }
                     }
 
-                    tracks.set(trackId, {
+                    results.push({
                       id: trackId,
                       title: titleText,
                       artist: artistText,
@@ -462,25 +475,31 @@ export async function registerRoutes(
                       url: `https://open.spotify.com/track/${trackId}`
                     });
                   });
+                  return results;
+                });
 
-                  if (tracks.size >= totalExpected) break;
+                pageTracks.forEach((t: any) => {
+                  if (!allTracksMap.has(t.id)) allTracksMap.set(t.id, t);
+                });
 
-                  window.scrollBy(0, 800);
-                  await delay(400);
+                if (allTracksMap.size >= targetCount) break;
 
-                  const newHeight = document.body.scrollHeight;
-                  if (newHeight === lastHeight) {
-                    staleCount++;
-                    if (staleCount >= 5) break;
-                  } else {
-                    staleCount = 0;
-                  }
-                  lastHeight = newHeight;
+                // Aggressive scroll simulation
+                await page.mouse.wheel({ deltaY: 1000 });
+                await new Promise(r => setTimeout(r, 600));
+
+                if (allTracksMap.size === lastTotal) {
+                  staleCycles++;
+                  if (staleCycles > 15) break;
+                } else {
+                  staleCycles = 0;
                 }
+                lastTotal = allTracksMap.size;
 
-                return Array.from(tracks.values());
-              }, totalInPlaylist);
+                if (i % 10 === 0) console.log(`[extract] Scraped ${allTracksMap.size}/${targetCount} tracks...`);
+              }
 
+              const allTracks = Array.from(allTracksMap.values());
               await browser.close();
 
               console.log(`[extract] Puppeteer scraped ${allTracks.length} tracks from "${title}".`);
