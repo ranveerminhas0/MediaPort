@@ -88,6 +88,7 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
       "--dump-json",
       "--no-playlist",
       "--geo-bypass",
+      "--js-runtimes", "node",
       ...cookieArgs,
       url
     ], { maxBuffer: 10 * 1024 * 1024 });
@@ -697,6 +698,7 @@ export async function registerRoutes(
       const args = [
         "-f", formatId,
         "--merge-output-format", "mp4",
+        "--js-runtimes", "node",
         ...cookieArgs,
         "-o", outTemplate,
         url
