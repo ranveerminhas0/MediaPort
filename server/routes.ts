@@ -87,8 +87,8 @@ const AUDIO_OUTPUT_FORMATS = [
 // Cookie Args Helper
 
 function getCookieArgs(platform: Platform): string[] {
-  // Skip cookies for YouTube to avoid n-sig challenge crashes
-  if (platform === "youtube") return [];
+  // Skip cookies for YouTube and YouTube Music to avoid n-sig challenge crashes
+  if (platform === "youtube" || platform === "youtube_music") return [];
 
   return fs.existsSync(path.join(process.cwd(), "cookies.txt"))
     ? ["--cookies", path.join(process.cwd(), "cookies.txt")]
@@ -623,6 +623,22 @@ export async function registerRoutes(
 
         // YouTube Music, SoundCloud, Bandcamp — use yt-dlp to get metadata
         try {
+          // Check if this is a YouTube Music playlist
+          if (platform === "youtube_music" && isYouTubePlaylist(input.url)) {
+            console.log(`[extract] YouTube Music playlist detected, extracting all tracks...`);
+            const plResult = await extractYtPlaylist(input.url, cookieArgs);
+            return res.status(200).json({
+              id: plResult.id,
+              title: plResult.title,
+              thumbnail: plResult.thumbnail,
+              extractor: "youtube", // Send back 'youtube' so frontend uses video-track/playlist config logic
+              mediaType: "playlist",
+              formats: [],
+              tracks: plResult.tracks,
+              playlistVideoCount: plResult.videoCount,
+            });
+          }
+
           const ytResult = await extractWithYtDlp(input.url, cookieArgs);
 
           return res.status(200).json({
@@ -636,7 +652,7 @@ export async function registerRoutes(
           });
         } catch (ytErr) {
           console.error(`[extract] yt-dlp failed for audio platform ${platform}:`, ytErr);
-          return res.status(500).json({ message: `Failed to extract audio info from ${platform}. The URL may be invalid.` });
+          return res.status(500).json({ message: `Failed to extract audio info from ${platform}. The URL may be invalid or require authentication.` });
         }
       }
 

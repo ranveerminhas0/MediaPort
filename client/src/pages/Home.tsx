@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useExtract } from "@/hooks/use-downloader";
 import { FormatList } from "@/components/FormatList";
 import { ImageGallery } from "@/components/ImageGallery";
@@ -36,6 +36,17 @@ export default function Home() {
   };
 
   const isYouTubePlaylist = result?.mediaType === "playlist" && result?.extractor === "youtube";
+
+  // Automatically switch config mode based on URL
+  useEffect(() => {
+    if (result && isYouTubePlaylist) {
+      if (url.includes("music.youtube.com") || url.includes("music.youtube")) {
+        setPlaylistConfig(prev => ({ ...prev, mode: "audio" }));
+      } else {
+        setPlaylistConfig(prev => ({ ...prev, mode: "video" }));
+      }
+    }
+  }, [result, isYouTubePlaylist, url]);
 
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
