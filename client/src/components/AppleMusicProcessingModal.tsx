@@ -337,7 +337,7 @@ export function AppleMusicProcessingModal({
                             <div className="flex items-center gap-3">
                                 {getStatusIcon()}
                                 <Dialog.Title className="text-sm font-semibold uppercase tracking-widest text-foreground">
-                                    Processing Lossless Audio
+                                    Processing FLAC Audio
                                 </Dialog.Title>
                             </div>
                             <Dialog.Close asChild>

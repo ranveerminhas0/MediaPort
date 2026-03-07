@@ -335,10 +335,9 @@ export async function registerRoutes(
 
           const displayTitle = artist && artist !== "Unknown Artist" ? `${artist} - ${title}` : title;
 
-          // Apple Music specific audio formats — includes true FLAC lossless
           const appleMusicFormats = [
             ...AUDIO_OUTPUT_FORMATS,
-            { format_id: "apple_flac_lossless", label: "FLAC Lossless (Apple Music)", ext: "flac", quality: "Lossless 48kHz/24-bit" },
+            { format_id: "apple_flac_lossless", label: "FLAC Lossless (Apple Music)", ext: "flac", quality: "Lossless 192kHz/24-bit" },
           ];
 
           return res.status(200).json({

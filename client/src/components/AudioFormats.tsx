@@ -133,16 +133,16 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year, ex
                                 initial={{ opacity: 0, x: -10 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: i * 0.05 }}
-                                className={`flex items-center justify-between group py-3 px-5 transition-all hover:bg-muted/30 border-l-2 border-transparent hover:border-primary/20 ${isAppleFLAC ? "bg-amber-500/[0.03] border-l-amber-500/30" : "bg-card/30"
+                                className={`flex items-center justify-between group py-3 px-5 transition-all hover:bg-muted/30 border-l-2 border-transparent hover:border-primary/20 ${isAppleFLAC ? "bg-card/30" : "bg-card/30"
                                     }`}
                             >
                                 <div className="flex items-center gap-6">
                                     <div className="flex flex-col">
-                                        <span className={`text-[10px] uppercase tracking-[0.2em] font-bold mb-0.5 ${isAppleFLAC ? "text-amber-500/70" : "text-muted-foreground/50"}`}>
+                                        <span className={`text-[10px] uppercase tracking-[0.2em] font-bold mb-0.5 ${isAppleFLAC ? "text-foreground/50" : "text-muted-foreground/50"}`}>
                                             Format
                                         </span>
-                                        <span className={`text-sm font-black uppercase tracking-tight ${isAppleFLAC ? "text-amber-500" : "text-foreground"}`}>
-                                            {isAppleFLAC ? "LOSSLESS ✦" : af.ext}
+                                        <span className={`text-sm font-black uppercase tracking-tight ${isAppleFLAC ? "text-foreground" : "text-foreground"}`}>
+                                            {isAppleFLAC ? "FLAC ✦" : af.ext}
                                         </span>
                                     </div>
 
@@ -153,12 +153,12 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year, ex
                                             Quality
                                         </span>
                                         <div className="flex items-center gap-2">
-                                            <div className={`w-1 h-3 rounded-full ${getQualityAccent(af.quality)}`} />
+                                            <div className={`w-1 h-3 rounded-full ${isAppleFLAC ? "bg-primary/80" : getQualityAccent(af.quality)}`} />
                                             <span className="text-xs font-semibold tracking-wide text-foreground/80">
                                                 {af.quality}
                                             </span>
                                             {isAppleFLAC && (
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold ml-1">
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-bold ml-1">
                                                     RECORD
                                                 </span>
                                             )}
@@ -169,7 +169,7 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year, ex
                                     onClick={() => handleDownload(af)}
                                     disabled={isProcessing || downloadMutation.isPending}
                                     className={`relative px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all overflow-hidden ${isAppleFLAC
-                                        ? "text-amber-500 hover:bg-amber-500/10"
+                                        ? "text-primary hover:bg-primary/10"
                                         : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
                                         }`}
                                 >
