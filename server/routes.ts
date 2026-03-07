@@ -75,6 +75,19 @@ export function isYouTubePlaylist(url: string): boolean {
   }
 }
 
+// Apple Music Playlist Detection
+export function isAppleMusicPlaylist(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    if (!urlObj.hostname.includes("music.apple.com")) return false;
+    return urlObj.pathname.includes("/playlist/") ||
+      urlObj.pathname.includes("/album/") ||
+      urlObj.pathname.includes("/station/");
+  } catch {
+    return false;
+  }
+}
+
 // Static audio output format options (capped at 320kbps)
 const AUDIO_OUTPUT_FORMATS = [
   { format_id: "mp3", label: "MP3 320kbps", ext: "mp3", quality: "320kbps" },
@@ -309,9 +322,30 @@ export async function registerRoutes(
       if (AUDIO_PLATFORMS.includes(platform)) {
         console.log(`[extract] Audio platform detected: ${platform}`);
 
-        // Apple Music — return metadata with special FLAC lossless option
+        // Apple Music
         if (platform === "apple_music") {
           console.log(`[extract] Apple Music detected, fetching metadata...`);
+
+          if (isAppleMusicPlaylist(input.url)) {
+            console.log(`[extract] Apple Music Playlist detected, extracting all tracks...`);
+            try {
+              const { extractAppleMusicPlaylist } = await import("./services/appleMusicService");
+              const plResult = await extractAppleMusicPlaylist(input.url);
+              return res.status(200).json({
+                id: plResult.id,
+                title: plResult.title,
+                thumbnail: plResult.thumbnail,
+                extractor: "apple_music_playlist",
+                mediaType: "playlist",
+                formats: [],
+                tracks: plResult.tracks,
+                audioFormats: AUDIO_OUTPUT_FORMATS,
+              });
+            } catch (err: any) {
+              console.error(`[extract] Apple Music playlist extraction failed:`, err);
+              return res.status(500).json({ message: "Failed to extract Apple Music playlist. Ensure the URL is valid and public." });
+            }
+          }
 
           let title = "Apple Music Track";
           let thumbnail: string | undefined;
@@ -886,10 +920,8 @@ export async function registerRoutes(
 
       const platform = detectPlatform(url);
 
-      // Guard: yt-dlp does not support Apple Music URLs at all
-      if (platform === "apple_music") {
-        return res.status(400).json({ message: "Apple Music URLs are not supported by the standard audio download pipeline. Use the FLAC Lossless option." });
-      }
+      // Guard against direct yt-dlp extraction of Apple Music which will fail
+      // We will instead intercept it below and convert to a ytsearch query
 
       const jobId = crypto.randomUUID();
       const filename = `${(title || 'audio').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${format}`;
@@ -902,15 +934,16 @@ export async function registerRoutes(
       const cookieArgs = getCookieArgs(platform);
 
       // Build the actual yt-dlp target URL
-      //   - Spotify: search YouTube for the track title
+      //   - Spotify / Apple Music: search YouTube for the track title and artist
       //   - Everything else: use the URL directly
       let targetUrl: string;
-      if (platform === "spotify") {
-        // title is already "Artist - Song" from the extract endpoint
+      if (platform === "spotify" || platform === "apple_music") {
+        // Append artist if available for better search accuracy
+        const searchTerms = artist ? `${artist} ${title}` : title || "unknown track";
         // Append "audio" to bias YouTube search towards music, not random videos
-        const searchQuery = `ytsearch1:${title || "unknown track"} audio`;
+        const searchQuery = `ytsearch1:${searchTerms} audio`;
         targetUrl = searchQuery;
-        console.log(`[audio-dl] Spotify detected, searching YouTube: ${searchQuery}`);
+        console.log(`[audio-dl] ${platform} detected, searching YouTube: ${searchQuery}`);
       } else {
         targetUrl = url;
       }
@@ -948,12 +981,11 @@ export async function registerRoutes(
         "--no-playlist",
         "--socket-timeout", "30",
         "--retries", "2",
-        // Only embed thumbnail + metadata for formats that support them
         ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
         "--js-runtimes", "node",
         ...metadataArgs,
         // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
-        ...(platform === "spotify" ? [] : cookieArgs),
+        ...((platform === "spotify" || platform === "apple_music") ? [] : cookieArgs),
         "-o", outTemplate,
         targetUrl
       ];

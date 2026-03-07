@@ -6,20 +6,23 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Button } from "./ui/button";
 import type { PlaylistConfig } from "./PlaylistConfigModal";
+import type { AppleMusicConfig } from "./AppleMusicConfigModal";
 
 interface PlaylistTracksProps {
     tracks: TrackItem[];
     playlistTitle: string;
     extractor?: string;
     playlistConfig?: PlaylistConfig;
+    appleMusicConfig?: AppleMusicConfig;
 }
 
-export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfig }: PlaylistTracksProps) {
+export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfig, appleMusicConfig }: PlaylistTracksProps) {
     const { toast } = useToast();
     const [downloadingTracks, setDownloadingTracks] = useState<Set<string>>(new Set());
     const [completedTracks, setCompletedTracks] = useState<Set<string>>(new Set());
 
     const isYouTube = extractor === "youtube";
+    const isAppleMusic = extractor === "apple_music_playlist";
     const config = playlistConfig || { mode: "video", resolution: "1080", audioFormat: "mp3" };
 
     const checkStatus = async (jobId: string, trackId: string) => {
@@ -72,6 +75,18 @@ export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfi
                         title: track.title,
                     };
                 }
+            } else if (isAppleMusic) {
+                // Apple Music playlist: fallback to audio endpoint search
+                const finalFormat = appleMusicConfig?.audioFormat || "wav";
+
+                endpoint = "/api/download/audio";
+                body = {
+                    url: track.url || `https://music.apple.com/search?term=${encodeURIComponent(track.title + ' ' + track.artist)}`,
+                    format: finalFormat,
+                    title: track.title,
+                    artist: track.artist,
+                    album: track.album,
+                };
             } else {
                 // Spotify playlist: use the audio endpoint
                 endpoint = "/api/download/audio";
@@ -145,9 +160,13 @@ export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfi
 
     // Determine button label based on extractor and config
     const getFormatLabel = () => {
-        if (!isYouTube) return "MP3";
-        if (config.mode === "audio") return config.audioFormat.toUpperCase();
-        return "MP4";
+        if (isAppleMusic) {
+            return appleMusicConfig?.audioFormat.toUpperCase() || "WAV";
+        }
+        if (isYouTube) {
+            return config.mode === "audio" ? config.audioFormat.toUpperCase() : "MP4";
+        }
+        return "MP3";
     };
 
     const formatLabel = getFormatLabel();

@@ -473,3 +473,174 @@ export function cancelRecording(job: RecordingJob): void {
         fs.unlinkSync(partialPath);
     }
 }
+
+/**
+ * Scrapes an Apple Music playlist or album page using Puppeteer to extract the tracklist.
+ */
+export async function extractAppleMusicPlaylist(url: string): Promise<{
+    id: string;
+    title: string;
+    thumbnail: string;
+    tracks: any[];
+}> {
+    const puppeteer = await import('puppeteer');
+    const browser = await puppeteer.default.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu']
+    });
+
+    try {
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 900 });
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        await page.goto(url, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
+        });
+
+        // Wait for track rows to appear
+        await page.waitForSelector('div[role="row"]', { timeout: 15000 })
+            .catch(() => console.log("[extract] Timeout waiting for Apple Music track rows..."));
+
+        // Extract Playlist/Album metadata from the page
+        const meta = await page.evaluate(`
+            (() => {
+                const getMeta = (prop) => {
+                    const el = document.querySelector(\`meta[property="\${prop}"], meta[name="\${prop}"]\`);
+                    return el ? el.getAttribute('content') : '';
+                };
+                
+                const titleValue = getMeta('og:title') || '';
+                const titleMatch = titleValue.replace(/\\s*on\\s+Apple.{0,3}Music\\s*$/i, "").trim();
+                
+                return {
+                    title: titleMatch || 'Unknown Apple Music Playlist',
+                    thumbnail: getMeta('og:image') || '',
+                };
+            })();
+        `) as any;
+
+        // Scroll to load all tracks if it's a long playlist
+        const allTracksMap = new Map();
+        let lastSize = 0;
+        let staleCycles = 0;
+
+        // Move mouse to center
+        await page.mouse.move(600, 500);
+
+        for (let i = 0; i < 50; i++) {
+            const pageTracks = await page.evaluate(`
+            (() => {
+                const rows = document.querySelectorAll('div[role="row"]');
+                const results = [];
+                
+                for (let j = 0; j < rows.length; j++) {
+                    const row = rows[j];
+                    
+                    let titleEl = row.querySelector('.songs-list-row__song-name') || 
+                                  row.querySelector('div[data-testid="track-title"]');
+                                  
+                    if (!titleEl) {
+                        const divs = row.querySelectorAll('div, span');
+                        for (let k = 0; k < divs.length; k++) {
+                            const cls = divs[k].className;
+                            if (typeof cls === 'string' && (cls.indexOf('title') !== -1 || cls.indexOf('name') !== -1)) {
+                                titleEl = divs[k];
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!titleEl || !titleEl.textContent) continue;
+                    
+                    const titleText = titleEl.textContent.trim();
+                    if (titleText === 'Song' || titleText === 'Title') continue;
+
+                    const artistEl = row.querySelector('.songs-list-row__by-line') ||
+                                     row.querySelector('div[data-testid="track-artist"]') ||
+                                     row.querySelector('.songs-list-row__link');
+                    
+                    const artistText = artistEl && artistEl.textContent ? artistEl.textContent.trim() : 'Unknown Artist';
+
+                    let timeEl = row.querySelector('time');
+                    if (!timeEl) {
+                        const divs = row.querySelectorAll('div, span');
+                        for (let k = 0; k < divs.length; k++) {
+                            const text = divs[k].textContent || '';
+                            if (/^\\d+:\\d+$/.test(text.trim())) {
+                                timeEl = divs[k];
+                                break;
+                            }
+                        }
+                    }
+                    
+                    let durationSec = 240;
+                    if (timeEl && timeEl.textContent) {
+                        const t = timeEl.textContent.trim();
+                        if (/^\\d+:\\d+$/.test(t)) {
+                            const parts = t.split(':');
+                            const m = parseInt(parts[0], 10);
+                            const s = parseInt(parts[1], 10);
+                            durationSec = m * 60 + s;
+                        }
+                    }
+
+                    const linkEl = row.querySelector('a[href*="/song/"]');
+                    let trackId = 'am_track_' + (titleText + artistText).replace(/[^a-zA-Z0-9]/g, '').substring(0, 15);
+                    let trackUrl = '';
+
+                    if (linkEl) {
+                        trackUrl = linkEl.href;
+                        const match = trackUrl.match(/i=(\\d+)/);
+                        if (match) trackId = match[1];
+                    }
+
+                    results.push({
+                        id: trackId,
+                        title: titleText,
+                        artist: artistText,
+                        album: 'Unknown Album',
+                        duration: durationSec,
+                        url: trackUrl || ('https://music.apple.com/search?term=' + encodeURIComponent(titleText + ' ' + artistText))
+                    });
+                }
+                
+                return results;
+            })();
+            `) as any[];
+
+            pageTracks.forEach((t: any) => {
+                if (!allTracksMap.has(t.id)) allTracksMap.set(t.id, t);
+            });
+
+            await page.mouse.wheel({ deltaY: 1000 });
+            await new Promise(r => setTimeout(r, 600));
+
+            if (allTracksMap.size === lastSize) {
+                staleCycles++;
+                if (staleCycles > 5) break;
+            } else {
+                staleCycles = 0;
+            }
+            lastSize = allTracksMap.size;
+        }
+
+        const allTracks = Array.from(allTracksMap.values());
+        await browser.close();
+
+        console.log(`[extract] Puppeteer scraped ${allTracks.length} tracks from Apple Music playlist "${meta.title}".`);
+
+        return {
+            id: url.split('/').pop()?.split('?')[0] || 'apple_music_playlist',
+            title: meta.title,
+            thumbnail: meta.thumbnail,
+            tracks: allTracks
+        };
+
+    } catch (err) {
+        await browser.close().catch(() => { });
+        console.error("[extract] Apple Music Puppeteer scraping failed:", err);
+        throw new Error("Failed to extract Apple Music playlist.");
+    }
+}

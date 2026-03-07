@@ -6,6 +6,8 @@ import { AudioFormats } from "@/components/AudioFormats";
 import { PlaylistTracks } from "@/components/PlaylistTracks";
 import { PlaylistConfigModal } from "@/components/PlaylistConfigModal";
 import type { PlaylistConfig } from "@/components/PlaylistConfigModal";
+import { AppleMusicConfigModal } from "@/components/AppleMusicConfigModal";
+import type { AppleMusicConfig } from "@/components/AppleMusicConfigModal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -24,6 +26,10 @@ export default function Home() {
   });
   const [configModalOpen, setConfigModalOpen] = useState(false);
 
+  // Apple Music config state
+  const [appleMusicConfig, setAppleMusicConfig] = useState<AppleMusicConfig>({ audioFormat: "wav" });
+  const [appleConfigModalOpen, setAppleConfigModalOpen] = useState(false);
+
   const handleExtract = (e: React.FormEvent) => {
     e.preventDefault();
     if (!url) return;
@@ -36,6 +42,7 @@ export default function Home() {
   };
 
   const isYouTubePlaylist = result?.mediaType === "playlist" && result?.extractor === "youtube";
+  const isAppleMusicPlaylist = result?.mediaType === "playlist" && result?.extractor === "apple_music_playlist";
 
   // Automatically switch config mode based on URL
   useEffect(() => {
@@ -200,6 +207,28 @@ export default function Home() {
                   </motion.div>
                 )}
 
+                {/* Apple Music Playlist: Configuration button */}
+                {isAppleMusicPlaylist && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-4"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 text-xs uppercase tracking-wider font-semibold border-primary/20 text-primary hover:bg-primary/10"
+                      onClick={() => setAppleConfigModalOpen(true)}
+                    >
+                      <Settings className="w-4 h-4" />
+                      Apple Music Config
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {appleMusicConfig.audioFormat.toUpperCase()} Quality
+                    </span>
+                  </motion.div>
+                )}
+
                 {/* Conditionally render based on media type */}
                 {result.mediaType === "playlist" && result.tracks && result.tracks.length > 0 ? (
                   <PlaylistTracks
@@ -207,6 +236,7 @@ export default function Home() {
                     playlistTitle={result.title}
                     extractor={result.extractor}
                     playlistConfig={isYouTubePlaylist ? playlistConfig : undefined}
+                    appleMusicConfig={isAppleMusicPlaylist ? appleMusicConfig : undefined}
                   />
                 ) : result.mediaType === "audio" && result.audioFormats && result.audioFormats.length > 0 ? (
                   <AudioFormats
@@ -239,6 +269,14 @@ export default function Home() {
         onClose={() => setConfigModalOpen(false)}
         onSave={setPlaylistConfig}
         currentConfig={playlistConfig}
+      />
+
+      {/* Apple Music Playlist Config Modal */}
+      <AppleMusicConfigModal
+        open={appleConfigModalOpen}
+        onClose={() => setAppleConfigModalOpen(false)}
+        onSave={setAppleMusicConfig}
+        currentConfig={appleMusicConfig}
       />
     </div>
   );
