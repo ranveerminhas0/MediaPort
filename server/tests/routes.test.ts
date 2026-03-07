@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPlatform, AUDIO_PLATFORMS } from '../routes';
+import { detectPlatform, AUDIO_PLATFORMS, isYouTubePlaylist } from '../routes';
 
 describe('detectPlatform', () => {
     it('should detect Spotify links', () => {
@@ -45,5 +45,32 @@ describe('AUDIO_PLATFORMS', () => {
     it('should NOT contain video-only platforms', () => {
         expect(AUDIO_PLATFORMS).not.toContain('youtube');
         expect(AUDIO_PLATFORMS).not.toContain('tiktok');
+    });
+});
+
+describe('isYouTubePlaylist', () => {
+    it('should detect /playlist?list= URLs', () => {
+        expect(isYouTubePlaylist('https://www.youtube.com/playlist?list=PLRqwX-V7Uu6ZiZxtDDRCi6uhfTH4FilpH')).toBe(true);
+    });
+
+    it('should detect /watch?v=...&list= URLs', () => {
+        expect(isYouTubePlaylist('https://www.youtube.com/watch?v=abc123&list=PLRqwX-V7Uu6ZiZxtDDRCi6uhfTH4FilpH')).toBe(true);
+    });
+
+    it('should NOT detect single video URLs', () => {
+        expect(isYouTubePlaylist('https://www.youtube.com/watch?v=abc123')).toBe(false);
+    });
+
+    it('should NOT detect non-YouTube URLs', () => {
+        expect(isYouTubePlaylist('https://open.spotify.com/playlist/123')).toBe(false);
+        expect(isYouTubePlaylist('https://example.com?list=123')).toBe(false);
+    });
+
+    it('should handle youtu.be short URLs with list param', () => {
+        expect(isYouTubePlaylist('https://youtu.be/abc123?list=PLRqwX-V7Uu6ZiZxtDDRCi6uhfTH4FilpH')).toBe(true);
+    });
+
+    it('should return false for invalid URLs', () => {
+        expect(isYouTubePlaylist('not-a-url')).toBe(false);
     });
 });

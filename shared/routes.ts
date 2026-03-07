@@ -55,6 +55,7 @@ export const ExtractorResponseSchema = z.object({
   album: z.string().optional(),
   year: z.string().optional(),
   duration: z.number().optional(),
+  playlistVideoCount: z.number().optional(),
 });
 
 export const api = {

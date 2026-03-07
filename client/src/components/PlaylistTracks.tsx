@@ -1,20 +1,26 @@
 import { TrackItem } from "@shared/routes";
-import { Music, Loader2, ListMusic, Download } from "lucide-react";
+import { Music, Loader2, ListMusic, Download, Film } from "lucide-react";
 import { motion } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { Button } from "./ui/button";
+import type { PlaylistConfig } from "./PlaylistConfigModal";
 
 interface PlaylistTracksProps {
     tracks: TrackItem[];
     playlistTitle: string;
+    extractor?: string;
+    playlistConfig?: PlaylistConfig;
 }
 
-export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
+export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfig }: PlaylistTracksProps) {
     const { toast } = useToast();
     const [downloadingTracks, setDownloadingTracks] = useState<Set<string>>(new Set());
     const [completedTracks, setCompletedTracks] = useState<Set<string>>(new Set());
+
+    const isYouTube = extractor === "youtube";
+    const config = playlistConfig || { mode: "video", resolution: "1080", audioFormat: "mp3" };
 
     const checkStatus = async (jobId: string, trackId: string) => {
         while (true) {
@@ -47,18 +53,41 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
         mutationFn: async ({ track }: { track: TrackItem }) => {
             setDownloadingTracks(prev => new Set(prev).add(track.id));
 
-            // Create target URL (Spotify single track DL actually searches YT)
-            // But if it's Spotify, the backend uses `ytsearch1:Artist - Title audio`
-            const res = await fetch("/api/download/audio", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
+            let endpoint: string;
+            let body: Record<string, any>;
+
+            if (isYouTube) {
+                // YouTube playlist: use the video-track endpoint with config
+                endpoint = "/api/download/video-track";
+                if (config.mode === "audio") {
+                    body = {
+                        url: track.url,
+                        audioFormat: config.audioFormat,
+                        title: track.title,
+                    };
+                } else {
+                    body = {
+                        url: track.url,
+                        resolution: config.resolution,
+                        title: track.title,
+                    };
+                }
+            } else {
+                // Spotify playlist: use the audio endpoint
+                endpoint = "/api/download/audio";
+                body = {
                     url: track.url || "https://open.spotify.com/track/placeholder",
-                    format: "mp3", // Default to MP3 320 for playlists
+                    format: "mp3",
                     title: track.title,
                     artist: track.artist,
                     album: track.album,
-                }),
+                };
+            }
+
+            const res = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
             });
 
             if (!res.ok) throw new Error(`Failed to start download for ${track.title}`);
@@ -114,13 +143,30 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
         }
     };
 
+    // Determine button label based on extractor and config
+    const getFormatLabel = () => {
+        if (!isYouTube) return "MP3";
+        if (config.mode === "audio") return config.audioFormat.toUpperCase();
+        return "MP4";
+    };
+
+    const formatLabel = getFormatLabel();
+
+    // Format duration helper
+    const formatDuration = (seconds?: number) => {
+        if (!seconds) return null;
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                     <ListMusic className="w-5 h-5 text-muted-foreground" />
                     <h3 className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-                        Playlist Tracks ({tracks.length})
+                        {isYouTube ? "Playlist Videos" : "Playlist Tracks"} ({tracks.length})
                     </h3>
                 </div>
                 <Button
@@ -131,7 +177,7 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
                     disabled={downloadingTracks.size > 0 || completedTracks.size === tracks.length}
                 >
                     <Download className="w-4 h-4" />
-                    {completedTracks.size === tracks.length ? "All Downloaded" : "Download All (MP3)"}
+                    {completedTracks.size === tracks.length ? "All Downloaded" : `Download All (${formatLabel})`}
                 </Button>
             </div>
 
@@ -139,6 +185,7 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
                 {tracks.map((track, i) => {
                     const isProcessing = downloadingTracks.has(track.id);
                     const isDone = completedTracks.has(track.id);
+                    const duration = formatDuration(track.duration);
 
                     return (
                         <motion.div
@@ -146,27 +193,41 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: Math.min(i * 0.05, 1) }}
-                            className="flex items-center justify-between group py-3 px-4 hover:bg-muted/50 transition-colors border border-transparent hover:border-border rounded-lg"
+                            className="flex items-center gap-3 group py-3 px-4 hover:bg-muted/50 transition-colors border border-transparent hover:border-border rounded-lg overflow-hidden"
                         >
-                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                            {/* Thumbnail — fixed width */}
+                            <div className="flex-shrink-0">
                                 {track.thumbnail ? (
-                                    <img src={track.thumbnail} alt={track.title} className="w-10 h-10 rounded shadow-sm object-cover" />
+                                    <img src={track.thumbnail} alt={track.title} className={`rounded shadow-sm object-cover ${isYouTube ? 'w-16 h-10' : 'w-10 h-10'}`} />
                                 ) : (
-                                    <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shadow-sm">
-                                        <Music className="w-4 h-4 text-muted-foreground/40" />
+                                    <div className={`rounded bg-muted flex items-center justify-center shadow-sm ${isYouTube ? 'w-16 h-10' : 'w-10 h-10'}`}>
+                                        {isYouTube ? (
+                                            <Film className="w-4 h-4 text-muted-foreground/40" />
+                                        ) : (
+                                            <Music className="w-4 h-4 text-muted-foreground/40" />
+                                        )}
                                     </div>
                                 )}
+                            </div>
 
-                                <div className="flex flex-col truncate pr-4">
-                                    <span className="text-sm font-semibold truncate text-foreground">
-                                        {track.title}
-                                    </span>
+                            {/* Title + artist — takes remaining space, truncates */}
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold truncate text-foreground">
+                                    {track.title}
+                                </p>
+                                <div className="flex items-center gap-2">
                                     <span className="text-xs text-muted-foreground truncate">
                                         {track.artist || "Unknown Artist"}
                                     </span>
+                                    {duration && (
+                                        <span className="text-xs text-muted-foreground/60 flex-shrink-0">
+                                            {duration}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
+                            {/* Download button — always visible */}
                             <button
                                 onClick={() => handleDownloadTrack(track)}
                                 disabled={isProcessing || isDone}
@@ -183,7 +244,7 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
                                 ) : isDone ? (
                                     "Done"
                                 ) : (
-                                    <><Download className="w-3.5 h-3.5" /> MP3</>
+                                    <><Download className="w-3.5 h-3.5" /> {formatLabel}</>
                                 )}
                             </button>
                         </motion.div>

@@ -59,6 +59,22 @@ const YTDLP_ONLY: Platform[] = ["youtube", "tiktok"];
 // Audio-first platforms
 export const AUDIO_PLATFORMS: Platform[] = ["spotify", "soundcloud", "bandcamp", "youtube_music", "apple_music"];
 
+// YouTube Playlist Detection
+export function isYouTubePlaylist(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.toLowerCase().replace("www.", "");
+    if (!hostname.includes("youtube.com") && !hostname.includes("youtu.be")) return false;
+    // /playlist?list=... is always a playlist
+    if (urlObj.pathname.startsWith("/playlist")) return true;
+    // /watch?v=...&list=... is a video within a playlist — treat as playlist
+    if (urlObj.searchParams.has("list")) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Static audio output format options (capped at 320kbps)
 const AUDIO_OUTPUT_FORMATS = [
   { format_id: "mp3", label: "MP3 320kbps", ext: "mp3", quality: "320kbps" },
@@ -139,6 +155,71 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
     extractor: data.extractor?.toString(),
     formats,
     hasVideo
+  };
+}
+
+// yt-dlp Playlist Extraction (no track limit)
+
+async function extractYtPlaylist(url: string, cookieArgs: string[]) {
+  // Use --flat-playlist to get metadata for ALL videos without downloading anything
+  const args = [
+    "--flat-playlist",
+    "--dump-json",
+    "--geo-bypass",
+    "--js-runtimes", "node",
+    ...cookieArgs,
+    url
+  ];
+
+  const result = await execFileAsync("yt-dlp", args, { maxBuffer: 50 * 1024 * 1024 });
+
+  // Each line of stdout is a separate JSON object (one per video)
+  const lines = result.stdout.trim().split("\n").filter(l => l.trim());
+
+  let playlistTitle = "YouTube Playlist";
+  let playlistThumbnail: string | undefined;
+  let playlistId = "yt_playlist";
+
+  const tracks = lines.map((line, index) => {
+    try {
+      const entry = JSON.parse(line);
+      // Extract playlist-level metadata from the first entry
+      if (index === 0) {
+        playlistTitle = entry.playlist_title || entry.playlist || playlistTitle;
+        playlistId = entry.playlist_id || playlistId;
+      }
+
+      const videoId = entry.id || entry.url || `video_${index}`;
+      const videoUrl = entry.url
+        ? (entry.url.startsWith("http") ? entry.url : `https://www.youtube.com/watch?v=${entry.id}`)
+        : `https://www.youtube.com/watch?v=${videoId}`;
+
+      return {
+        id: videoId,
+        title: entry.title || `Video ${index + 1}`,
+        artist: entry.uploader || entry.channel || undefined,
+        thumbnail: entry.thumbnails?.[0]?.url || entry.thumbnail || undefined,
+        duration: entry.duration ? Number(entry.duration) : undefined,
+        url: videoUrl,
+      };
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+
+  // Use thumbnail from the first track if no playlist-level thumbnail
+  if (!playlistThumbnail && tracks.length > 0) {
+    playlistThumbnail = (tracks[0] as any)?.thumbnail;
+  }
+
+  console.log(`[extract] YouTube playlist extracted: ${tracks.length} videos from "${playlistTitle}"`);
+
+  return {
+    id: playlistId,
+    title: playlistTitle,
+    thumbnail: playlistThumbnail,
+    tracks,
+    videoCount: tracks.length,
   };
 }
 
@@ -561,6 +642,27 @@ export async function registerRoutes(
 
       // Strategy 1: yt-dlp only platforms (YouTube, TikTok, etc.)
       if (YTDLP_ONLY.includes(platform) || platform === "generic") {
+        // Check if this is a YouTube playlist
+        if (platform === "youtube" && isYouTubePlaylist(input.url)) {
+          console.log(`[extract] YouTube playlist detected, extracting all videos...`);
+          try {
+            const plResult = await extractYtPlaylist(input.url, cookieArgs);
+            return res.status(200).json({
+              id: plResult.id,
+              title: plResult.title,
+              thumbnail: plResult.thumbnail,
+              extractor: "youtube",
+              mediaType: "playlist",
+              formats: [],
+              tracks: plResult.tracks,
+              playlistVideoCount: plResult.videoCount,
+            });
+          } catch (plErr) {
+            console.error(`[extract] YouTube playlist extraction failed:`, plErr);
+            return res.status(500).json({ message: "Failed to extract YouTube playlist. The URL may be invalid or the playlist is private." });
+          }
+        }
+
         console.log(`[extract] Using yt-dlp (primary) for ${platform}`);
         const ytResult = await extractWithYtDlp(input.url, cookieArgs);
 
@@ -889,6 +991,111 @@ export async function registerRoutes(
     }
   });
 
+  // Video Track Download Endpoint (for YouTube playlist items)
+  app.post("/api/download/video-track", async (req, res) => {
+    try {
+      const { url, resolution, audioFormat, title } = req.body;
+      if (!url) {
+        return res.status(400).json({ message: "Missing video URL." });
+      }
+
+      const isAudioOnly = audioFormat && ["mp3", "m4a", "wav", "flac", "opus"].includes(audioFormat);
+      const jobId = crypto.randomUUID();
+      const tmpDir = os.tmpdir();
+      const safeTitle = (title || 'video').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      const ext = isAudioOnly ? audioFormat : "mp4";
+      const filename = `${safeTitle}.${ext}`;
+      const outTemplate = path.join(tmpDir, `${jobId}.%(ext)s`);
+
+      const platform = detectPlatform(url);
+      const cookieArgs = getCookieArgs(platform);
+
+      jobs.set(jobId, { status: "processing" });
+      res.status(200).json({ jobId });
+
+      let args: string[];
+
+      if (isAudioOnly) {
+        // Audio extraction mode
+        const qualityMap: Record<string, string> = {
+          mp3: "320K", m4a: "256K", opus: "256K", flac: "0", wav: "0",
+        };
+        const audioQuality = qualityMap[audioFormat] || "0";
+        const supportsRichMeta = ["mp3", "m4a", "opus"].includes(audioFormat);
+
+        args = [
+          "-x",
+          "--audio-format", audioFormat,
+          "--audio-quality", audioQuality,
+          "--no-playlist",
+          "--socket-timeout", "30",
+          "--retries", "2",
+          ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
+          "--js-runtimes", "node",
+          ...cookieArgs,
+          "-o", outTemplate,
+          url
+        ];
+      } else {
+        // Video download mode with resolution selection
+        const res_height = resolution || "1080";
+        args = [
+          "-f", `bestvideo[height<=${res_height}]+bestaudio/best[height<=${res_height}]`,
+          "--merge-output-format", "mp4",
+          "--postprocessor-args", "ffmpeg:-c:a aac -b:a 256k",
+          "--no-playlist",
+          "--socket-timeout", "30",
+          "--retries", "2",
+          "--js-runtimes", "node",
+          ...cookieArgs,
+          "-o", outTemplate,
+          url
+        ];
+      }
+
+      console.log(`[video-track-dl] Spawning yt-dlp:`, args.join(" "));
+      const dlProcess = spawn("yt-dlp", args);
+
+      let stderrOutput = "";
+      let stdoutOutput = "";
+      dlProcess.stdout.on("data", (chunk: Buffer) => { stdoutOutput += chunk.toString(); });
+      dlProcess.stderr.on("data", (chunk: Buffer) => { stderrOutput += chunk.toString(); });
+
+      // Kill after 5 minutes for video downloads
+      const killTimeout = setTimeout(() => {
+        dlProcess.kill("SIGKILL");
+        jobs.set(jobId, { status: "error", error: "Download timed out after 5 minutes." });
+        console.error(`[video-track-dl] Job ${jobId} timed out and was killed.`);
+      }, 5 * 60 * 1000);
+
+      dlProcess.on("close", (code) => {
+        clearTimeout(killTimeout);
+
+        const files = fs.readdirSync(tmpDir);
+        const downloadedFile = files.find(f => f.startsWith(jobId));
+
+        if (code === 0 || (code === 1 && downloadedFile)) {
+          if (downloadedFile) {
+            jobs.set(jobId, {
+              status: "completed",
+              filePath: path.join(tmpDir, downloadedFile),
+              fileName: filename
+            });
+          } else {
+            jobs.set(jobId, { status: "error", error: "File not found after processing." });
+          }
+        } else {
+          const errMsg = (stderrOutput || stdoutOutput).trim().split("\n").slice(-5).join(" ").substring(0, 300);
+          console.error(`[video-track-dl] yt-dlp failed (code ${code}). Last output:\n${errMsg}`);
+          jobs.set(jobId, { status: "error", error: `Download failed: ${errMsg || `exit code ${code}`}` });
+        }
+      });
+
+    } catch (err) {
+      console.error("Video track download error:", err);
+      res.status(500).json({ message: "Failed to start video track download." });
+    }
+  });
 
   // Image Proxy Download
   // Proxies image downloads through the server to avoid CORS issues

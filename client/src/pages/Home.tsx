@@ -4,15 +4,25 @@ import { FormatList } from "@/components/FormatList";
 import { ImageGallery } from "@/components/ImageGallery";
 import { AudioFormats } from "@/components/AudioFormats";
 import { PlaylistTracks } from "@/components/PlaylistTracks";
+import { PlaylistConfigModal } from "@/components/PlaylistConfigModal";
+import type { PlaylistConfig } from "@/components/PlaylistConfigModal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Loader2, Download, Search } from "lucide-react";
+import { Loader2, Download, Search, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Home() {
   const [url, setUrl] = useState("");
   const { mutate: extract, data: result, isPending, reset } = useExtract();
+
+  // YouTube playlist config state
+  const [playlistConfig, setPlaylistConfig] = useState<PlaylistConfig>({
+    mode: "video",
+    resolution: "1080",
+    audioFormat: "mp3",
+  });
+  const [configModalOpen, setConfigModalOpen] = useState(false);
 
   const handleExtract = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +34,8 @@ export default function Home() {
     setUrl("");
     reset();
   };
+
+  const isYouTubePlaylist = result?.mediaType === "playlist" && result?.extractor === "youtube";
 
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
@@ -152,11 +164,38 @@ export default function Home() {
                   </div>
                 </div>
 
+                {/* YouTube Playlist: Configuration button */}
+                {isYouTubePlaylist && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-4"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 text-xs uppercase tracking-wider font-semibold"
+                      onClick={() => setConfigModalOpen(true)}
+                    >
+                      <Settings className="w-4 h-4" />
+                      Configuration
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {playlistConfig.mode === "video"
+                        ? `MP4 · ${playlistConfig.resolution}p`
+                        : `${playlistConfig.audioFormat.toUpperCase()} · Audio Only`
+                      }
+                    </span>
+                  </motion.div>
+                )}
+
                 {/* Conditionally render based on media type */}
                 {result.mediaType === "playlist" && result.tracks && result.tracks.length > 0 ? (
                   <PlaylistTracks
                     tracks={result.tracks}
                     playlistTitle={result.title}
+                    extractor={result.extractor}
+                    playlistConfig={isYouTubePlaylist ? playlistConfig : undefined}
                   />
                 ) : result.mediaType === "audio" && result.audioFormats && result.audioFormats.length > 0 ? (
                   <AudioFormats
@@ -182,7 +221,14 @@ export default function Home() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* YouTube Playlist Config Modal */}
+      <PlaylistConfigModal
+        open={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        onSave={setPlaylistConfig}
+        currentConfig={playlistConfig}
+      />
     </div>
   );
 }
-
