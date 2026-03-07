@@ -135,7 +135,7 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
                 </Button>
             </div>
 
-            <div className="grid gap-2 max-h-[500px] overflow-y-auto pr-2 scrollbar-thin">
+            <div className="grid gap-2 max-h-[500px] overflow-y-auto pr-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {tracks.map((track, i) => {
                     const isProcessing = downloadingTracks.has(track.id);
                     const isDone = completedTracks.has(track.id);
@@ -183,7 +183,7 @@ export function PlaylistTracks({ tracks, playlistTitle }: PlaylistTracksProps) {
                                 ) : isDone ? (
                                     "Done"
                                 ) : (
-                                    "MP3"
+                                    <><Download className="w-3.5 h-3.5" /> MP3</>
                                 )}
                             </button>
                         </motion.div>
