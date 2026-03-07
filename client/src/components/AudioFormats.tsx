@@ -94,13 +94,12 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year, ex
         downloadMutation.mutate({ format: format.format_id });
     };
 
-    // Format quality badge colors
-    const getQualityColor = (quality: string) => {
-        if (quality.includes("320")) return "text-emerald-500 bg-emerald-500/10";
-        if (quality.includes("256")) return "text-blue-500 bg-blue-500/10";
-        if (quality.includes("Lossless")) return "text-amber-500 bg-amber-500/10";
-        if (quality.includes("~320")) return "text-purple-500 bg-purple-500/10";
-        return "text-muted-foreground bg-muted";
+    // Format quality colors (minimalist professional style)
+    const getQualityAccent = (quality: string) => {
+        if (quality.includes("320")) return "bg-emerald-500/60";
+        if (quality.includes("256")) return "bg-blue-500/60";
+        if (quality.includes("Lossless")) return "bg-amber-500/80";
+        return "bg-muted-foreground/30";
     };
 
     // Check if this is Apple Music
@@ -117,12 +116,12 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year, ex
 
             <p className="text-xs text-muted-foreground -mt-2">
                 {isAppleMusic
-                    ? "Select your preferred format. FLAC Lossless records directly from Apple Music in real-time."
-                    : "Select your preferred audio format. Max quality: 320kbps."
+                    ? "Select your preferred format. High-Resolution records directly from Apple Music in real-time."
+                    : "Select your preferred audio format. High-fidelity streams available."
                 }
             </p>
 
-            <div className="grid gap-2">
+            <div className="grid gap-1.5">
                 {audioFormats
                     .filter(af => !isAppleMusic || af.format_id === "apple_flac_lossless")
                     .map((af, i) => {
@@ -131,42 +130,59 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year, ex
                         return (
                             <motion.div
                                 key={`${af.format_id}-${i}`}
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: i * 0.05 }}
-                                className={`flex items-center justify-between group py-3 px-4 hover:bg-muted/50 transition-colors ${isAppleFLAC ? "border border-amber-500/20 bg-amber-500/5" : ""
+                                className={`flex items-center justify-between group py-3 px-5 transition-all hover:bg-muted/30 border-l-2 border-transparent hover:border-primary/20 ${isAppleFLAC ? "bg-amber-500/[0.03] border-l-amber-500/30" : "bg-card/30"
                                     }`}
                             >
-                                <div className="flex items-center gap-4">
-                                    <Music className={`w-4 h-4 ${isAppleFLAC ? "text-amber-500/60" : "text-muted-foreground/40"}`} />
-                                    <span className={`text-sm font-semibold uppercase tracking-wide ${isAppleFLAC ? "text-amber-500" : "text-foreground"}`}>
-                                        {isAppleFLAC ? "FLAC ✦" : af.ext}
-                                    </span>
-                                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getQualityColor(af.quality)}`}>
-                                        {af.quality}
-                                    </span>
-                                    {isAppleFLAC && (
-                                        <span className="text-[10px] uppercase tracking-wider text-amber-500/60 font-medium">
-                                            Real-time
+                                <div className="flex items-center gap-6">
+                                    <div className="flex flex-col">
+                                        <span className={`text-[10px] uppercase tracking-[0.2em] font-bold mb-0.5 ${isAppleFLAC ? "text-amber-500/70" : "text-muted-foreground/50"}`}>
+                                            Format
                                         </span>
-                                    )}
+                                        <span className={`text-sm font-black uppercase tracking-tight ${isAppleFLAC ? "text-amber-500" : "text-foreground"}`}>
+                                            {isAppleFLAC ? "LOSSLESS ✦" : af.ext}
+                                        </span>
+                                    </div>
+
+                                    <div className="h-8 w-[1px] bg-border/50 mx-1" />
+
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-muted-foreground/50 mb-0.5">
+                                            Quality
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-1 h-3 rounded-full ${getQualityAccent(af.quality)}`} />
+                                            <span className="text-xs font-semibold tracking-wide text-foreground/80">
+                                                {af.quality}
+                                            </span>
+                                            {isAppleFLAC && (
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold ml-1">
+                                                    RECORD
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => handleDownload(af)}
                                     disabled={isProcessing || downloadMutation.isPending}
-                                    className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-tighter transition-colors disabled:opacity-50 ${isAppleFLAC
-                                        ? "text-amber-500 hover:text-amber-400"
-                                        : "text-muted-foreground hover:text-primary"
+                                    className={`relative px-4 py-2 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all overflow-hidden ${isAppleFLAC
+                                        ? "text-amber-500 hover:bg-amber-500/10"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
                                         }`}
                                 >
-                                    {isProcessing ? (
-                                        <>
-                                            <Loader2 className="w-3 h-3 animate-spin" />
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        "Get"
-                                    )}
+                                    <span className="relative z-10">
+                                        {isProcessing ? (
+                                            <div className="flex items-center gap-2">
+                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                BUSY
+                                            </div>
+                                        ) : (
+                                            "Get"
+                                        )}
+                                    </span>
                                 </button>
                             </motion.div>
                         );

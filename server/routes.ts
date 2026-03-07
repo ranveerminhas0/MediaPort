@@ -80,7 +80,7 @@ const AUDIO_OUTPUT_FORMATS = [
   { format_id: "mp3", label: "MP3 320kbps", ext: "mp3", quality: "320kbps" },
   { format_id: "m4a", label: "M4A 256kbps", ext: "m4a", quality: "256kbps" },
   { format_id: "wav", label: "WAV Lossless", ext: "wav", quality: "Lossless" },
-  { format_id: "flac", label: "FLAC (transcoded)", ext: "flac", quality: "~320kbps" },
+  { format_id: "flac", label: "FLAC Lossless", ext: "flac", quality: "Lossless" },
   { format_id: "opus", label: "Opus 256kbps", ext: "opus", quality: "256kbps" },
 ];
 
