@@ -596,12 +596,26 @@ export async function extractAppleMusicPlaylist(url: string): Promise<{
                         if (match) trackId = match[1];
                     }
 
+                    // Extract track-specific thumbnail
+                    let trackThumb = '';
+                    const pictureEl = row.querySelector('picture');
+                    if (pictureEl) {
+                        const sourceEl = pictureEl.querySelector('source');
+                        const srcset = sourceEl ? sourceEl.getAttribute('srcset') : null;
+                        if (srcset) {
+                            // Take the first URL and upsize it
+                            const firstUrl = srcset.split(',')[0].split(' ')[0];
+                            trackThumb = firstUrl.replace(/\\/\\d+x\\d+bb/, "/300x300bb");
+                        }
+                    }
+
                     results.push({
                         id: trackId,
                         title: titleText,
                         artist: artistText,
                         album: 'Unknown Album',
                         duration: durationSec,
+                        thumbnail: trackThumb,
                         url: trackUrl || ('https://music.apple.com/search?term=' + encodeURIComponent(titleText + ' ' + artistText))
                     });
                 }
