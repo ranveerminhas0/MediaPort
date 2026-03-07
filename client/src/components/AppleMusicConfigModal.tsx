@@ -65,7 +65,13 @@ export function AppleMusicConfigModal({ open, onClose, onSave, currentConfig }: 
                             </div>
 
                             {/* Content */}
-                            <div className="px-6 py-6 space-y-6">
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                                className="px-6 py-6 space-y-6 overflow-hidden"
+                            >
                                 {/* Informational Banner */}
                                 <div className="bg-primary/5 text-primary rounded-lg px-4 py-3 border border-primary/20 text-sm">
                                     <p>
@@ -119,7 +125,7 @@ export function AppleMusicConfigModal({ open, onClose, onSave, currentConfig }: 
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </motion.div>
 
                             {/* Footer */}
                             <div className="px-6 py-4 border-t border-border flex justify-end gap-3 bg-muted/10">
