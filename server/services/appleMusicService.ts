@@ -626,7 +626,10 @@ export async function extractAppleMusicPlaylist(url: string): Promise<{
             lastSize = allTracksMap.size;
         }
 
-        const allTracks = Array.from(allTracksMap.values());
+        const allTracks = Array.from(allTracksMap.values()).map(t => ({
+            ...t,
+            thumbnail: t.thumbnail || meta.thumbnail
+        }));
         await browser.close();
 
         console.log(`[extract] Puppeteer scraped ${allTracks.length} tracks from Apple Music playlist "${meta.title}".`);
