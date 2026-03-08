@@ -1055,12 +1055,24 @@ export async function registerRoutes(
       // Metadata tagging via ffmpeg postprocessor args
       // Only for formats that support it — WAV/FLAC will be corrupted by this
       const metadataArgs: string[] = [];
+      let ffArgs = "ffmpeg:";
+      let hasFfArgs = false;
+
+      // Force 9216 kbps (24-bit, 192kHz) for WAV only
+      if (format === "wav") {
+        ffArgs += " -ar 192000 -c:a pcm_s24le"; // 192kHz, 24-bit PCM
+        hasFfArgs = true;
+      }
+
       if (supportsRichMeta && (title || artist || album || year)) {
-        let ffArgs = "ffmpeg:";
         if (title) ffArgs += ` -metadata title=${JSON.stringify(title)}`;
         if (artist) ffArgs += ` -metadata artist=${JSON.stringify(artist)}`;
         if (album) ffArgs += ` -metadata album=${JSON.stringify(album)}`;
         if (year) ffArgs += ` -metadata date=${JSON.stringify(year)}`;
+        hasFfArgs = true;
+      }
+
+      if (hasFfArgs) {
         metadataArgs.push("--postprocessor-args", ffArgs);
       }
 
