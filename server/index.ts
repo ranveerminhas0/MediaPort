@@ -22,6 +22,18 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+import rateLimit from "express-rate-limit";
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 25, // Limit each IP to 25 requests per `window` (here, per 1 minute)
+  message: { message: "Too many requests from this IP, please try again after a minute" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/api/", apiLimiter);
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

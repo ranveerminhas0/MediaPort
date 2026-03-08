@@ -61,7 +61,35 @@ export function registerAppleMusicRoutes(app: Express, httpServer: HttpServer): 
 
     // ⚠️  NOTICE: This WebSocket channel relays real-time progress of an
     // ongoing copyright-infringing capturing session.
-    const wss = new WebSocketServer({ server: httpServer, path: "/ws/applemusic" });
+    const wss = new WebSocketServer({ noServer: true });
+
+    // Handle the HTTP upgrade to WebSocket manually so we can verify the Origin
+    httpServer.on("upgrade", (request, socket, head) => {
+        // We only care about upgrades bound for the apple music path
+        if (request.url !== "/ws/applemusic") return;
+
+        const origin = request.headers.origin;
+
+        // Allowed origins - deployment URL here (e.g. Render, Vercel, Whatever tf you use)
+        const allowedOrigins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            process.env.FRONTEND_URL // Will be undefined if not set
+        ].filter(Boolean); // Remove undefined entries
+
+        // If it's a browser connection (has origin) and it's not in our explicit allowlist
+        if (origin && !allowedOrigins.includes(origin)) {
+            console.warn(`[ws] Rejected unauthorized WebSocket connection from origin: ${origin}`);
+            socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+            socket.destroy();
+            return;
+        }
+
+        // If origin check passes, complete the WebSocket upgrade
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit("connection", ws, request);
+        });
+    });
 
     wss.on("connection", (ws: WebSocket) => {
         let subscribedJobId: string | null = null;

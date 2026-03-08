@@ -10,11 +10,89 @@ import os from "os";
 import fs from "fs";
 import https from "https";
 import http from "http";
+import { URL as NodeURL } from "url";
+import dns from "dns/promises";
+import { isIP } from "net";
 
 const execFileAsync = promisify(execFile);
 
 // Simple in-memory job queue for downloads
-const jobs = new Map<string, { status: "processing" | "completed" | "error", filePath?: string, fileName?: string, error?: string }>();
+const jobs = new Map<string, { status: "processing" | "completed" | "error", filePath?: string, fileName?: string, error?: string, timestamp: number }>();
+
+// Auto-purge completed jobs after 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  jobs.forEach((job, id) => {
+    if ((job.status === "completed" || job.status === "error") && (now - job.timestamp > 10 * 60 * 1000)) {
+      if (job.filePath && fs.existsSync(job.filePath)) {
+        try { fs.unlinkSync(job.filePath); } catch (e) { console.error("Could not delete job file", e); }
+      }
+      jobs.delete(id);
+    }
+  });
+}, 10 * 60 * 1000);
+
+// Security Validation Tools
+export function sanitizeUrl(urlStr: string): string {
+  try {
+    const parsed = new NodeURL(urlStr);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('Only http/https URLs are allowed');
+    }
+    if (urlStr.trim().startsWith('-')) {
+      throw new Error('Invalid URL format');
+    }
+    return urlStr;
+  } catch (err: any) {
+    if (err.message === 'Only http/https URLs are allowed' || err.message === 'Invalid URL format') throw err;
+    throw new Error('Invalid URL');
+  }
+}
+
+function isPrivateIP(ip: string): boolean {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return false;
+  const p1 = parseInt(parts[0], 10);
+  const p2 = parseInt(parts[1], 10);
+  const p3 = parseInt(parts[2], 10);
+
+  // 10.0.0.0/8
+  if (p1 === 10) return true;
+  // 172.16.0.0/12
+  if (p1 === 172 && p2 >= 16 && p2 <= 31) return true;
+  // 192.168.0.0/16
+  if (p1 === 192 && p2 === 168) return true;
+  // 127.0.0.0/8
+  if (p1 === 127) return true;
+  // 169.254.0.0/16 (Link Local)
+  if (p1 === 169 && p2 === 254) return true;
+  if (ip === "0.0.0.0") return true;
+
+  return false;
+}
+
+// Download Input Schemas
+const DownloadVideoSchema = z.object({
+  url: z.string().url(),
+  formatId: z.string().regex(/^[a-zA-Z0-9+_\-]+$/),
+  title: z.string().optional()
+});
+
+const DownloadAudioSchema = z.object({
+  url: z.string().url(),
+  format: z.enum(["mp3", "m4a", "wav", "flac", "opus", "apple_flac_lossless"]),
+  title: z.string().optional(),
+  artist: z.string().optional(),
+  album: z.string().optional(),
+  year: z.string().optional()
+});
+
+const DownloadVideoTrackSchema = z.object({
+  url: z.string().url(),
+  resolution: z.string().optional(),
+  audioFormat: z.string().optional(),
+  title: z.string().optional()
+});
 
 // Platform Detection
 
@@ -111,6 +189,7 @@ function getCookieArgs(platform: Platform): string[] {
 // yt-dlp Extraction
 
 async function extractWithYtDlp(url: string, cookieArgs: string[]) {
+  const safeUrl = sanitizeUrl(url);
   let stdout = "";
   try {
     const result = await execFileAsync("yt-dlp", [
@@ -119,7 +198,8 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
       "--geo-bypass",
       "--js-runtimes", "node",
       ...cookieArgs,
-      url
+      "--",
+      safeUrl
     ], { maxBuffer: 10 * 1024 * 1024 });
     stdout = result.stdout;
   } catch (execError: any) {
@@ -174,6 +254,7 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
 // yt-dlp Playlist Extraction (no track limit)
 
 async function extractYtPlaylist(url: string, cookieArgs: string[]) {
+  const safeUrl = sanitizeUrl(url);
   // Use --flat-playlist to get metadata for ALL videos without downloading anything
   const args = [
     "--flat-playlist",
@@ -181,7 +262,8 @@ async function extractYtPlaylist(url: string, cookieArgs: string[]) {
     "--geo-bypass",
     "--js-runtimes", "node",
     ...cookieArgs,
-    url
+    "--",
+    safeUrl
   ];
 
   const result = await execFileAsync("yt-dlp", args, { maxBuffer: 50 * 1024 * 1024 });
@@ -239,6 +321,7 @@ async function extractYtPlaylist(url: string, cookieArgs: string[]) {
 // gallery-dl Extraction
 
 async function extractWithGalleryDl(url: string, cookieArgs: string[]) {
+  const safeUrl = sanitizeUrl(url);
   // gallery-dl uses --cookies (same Netscape format), not --cookies-from-browser (fck it)
   const gdlCookieArgs: string[] = [];
   const cookiePath = path.join(process.cwd(), "cookies.txt");
@@ -250,7 +333,8 @@ async function extractWithGalleryDl(url: string, cookieArgs: string[]) {
     "--dump-json",
     "--no-download",
     ...gdlCookieArgs,
-    url
+    "--",
+    safeUrl
   ], { maxBuffer: 10 * 1024 * 1024 });
 
   // gallery-dl outputs a JSON array: [[2, dirMeta], [3, url, fileMeta], ...]
@@ -829,10 +913,12 @@ export async function registerRoutes(
   // Video Download (existing yt-dlp pipeline)
   app.post("/api/download", async (req, res) => {
     try {
-      const { url, formatId, title } = req.body;
-      if (!url || !formatId) {
-        return res.status(400).json({ message: "Missing url or formatId." });
+      const parsedParams = DownloadVideoSchema.safeParse(req.body);
+      if (!parsedParams.success) {
+        return res.status(400).json({ message: "Invalid input parameters", details: parsedParams.error.format() });
       }
+      const { url, formatId, title } = parsedParams.data;
+      const safeUrl = sanitizeUrl(url);
 
       const safeTitle = (title || 'video').replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const filename = `${safeTitle}.mp4`;
@@ -840,10 +926,10 @@ export async function registerRoutes(
       const jobId = crypto.randomUUID();
       const outTemplate = path.join(os.tmpdir(), `${jobId}.%(ext)s`);
 
-      jobs.set(jobId, { status: "processing" });
+      jobs.set(jobId, { status: "processing", timestamp: Date.now() });
       res.status(200).json({ jobId });
 
-      const platform = detectPlatform(url);
+      const platform = detectPlatform(safeUrl);
       const cookieArgs = getCookieArgs(platform);
 
       const args = [
@@ -852,7 +938,8 @@ export async function registerRoutes(
         "--js-runtimes", "node",
         ...cookieArgs,
         "-o", outTemplate,
-        url
+        "--",
+        safeUrl
       ];
 
       const ytProcess = spawn("yt-dlp", args);
@@ -867,13 +954,14 @@ export async function registerRoutes(
             jobs.set(jobId, {
               status: "completed",
               filePath: path.join(dir, downloadedFile),
-              fileName: filename
+              fileName: filename,
+              timestamp: Date.now()
             });
           } else {
-            jobs.set(jobId, { status: "error", error: "File not found after processing." });
+            jobs.set(jobId, { status: "error", error: "File not found after processing.", timestamp: Date.now() });
           }
         } else {
-          jobs.set(jobId, { status: "error", error: `yt-dlp exited with code ${code}` });
+          jobs.set(jobId, { status: "error", error: `yt-dlp exited with code ${code}`, timestamp: Date.now() });
         }
       });
     } catch (err) {
@@ -908,10 +996,12 @@ export async function registerRoutes(
   // Audio Download Endpoint
   app.post("/api/download/audio", async (req, res) => {
     try {
-      const { url, format, title, artist, album, year } = req.body;
-      if (!url || !format) {
-        return res.status(400).json({ message: "Missing url or format." });
+      const parsedParams = DownloadAudioSchema.safeParse(req.body);
+      if (!parsedParams.success) {
+        return res.status(400).json({ message: "Invalid input parameters", details: parsedParams.error.format() });
       }
+      const { url, format, title, artist, album, year } = parsedParams.data;
+      const safeUrl = sanitizeUrl(url);
 
       // Guard: apple_flac_lossless uses its own dedicated recording pipeline
       if (format === "apple_flac_lossless") {
@@ -927,7 +1017,7 @@ export async function registerRoutes(
       const filename = `${(title || 'audio').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${format}`;
       const tmpDir = os.tmpdir();
 
-      jobs.set(jobId, { status: "processing" });
+      jobs.set(jobId, { status: "processing", timestamp: Date.now() });
       res.status(200).json({ jobId });
 
       const outTemplate = path.join(tmpDir, `${jobId}.%(ext)s`);
@@ -945,7 +1035,7 @@ export async function registerRoutes(
         targetUrl = searchQuery;
         console.log(`[audio-dl] ${platform} detected, searching YouTube: ${searchQuery}`);
       } else {
-        targetUrl = url;
+        targetUrl = safeUrl;
       }
 
       // Format-specific quality values
@@ -987,6 +1077,7 @@ export async function registerRoutes(
         // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
         ...((platform === "spotify" || platform === "apple_music") ? [] : cookieArgs),
         "-o", outTemplate,
+        "--",
         targetUrl
       ];
 
@@ -1002,7 +1093,7 @@ export async function registerRoutes(
       // Kill after 3 minutes to prevent infinite hangs
       const killTimeout = setTimeout(() => {
         dlProcess.kill("SIGKILL");
-        jobs.set(jobId, { status: "error", error: "Download timed out after 3 minutes." });
+        jobs.set(jobId, { status: "error", error: "Download timed out after 3 minutes.", timestamp: Date.now() });
         console.error(`[audio-dl] Job ${jobId} timed out and was killed.`);
       }, 3 * 60 * 1000);
 
@@ -1018,17 +1109,19 @@ export async function registerRoutes(
             jobs.set(jobId, {
               status: "completed",
               filePath: path.join(tmpDir, downloadedFile),
-              fileName: filename
+              fileName: filename,
+              timestamp: Date.now()
             });
             if (code === 1) console.log(`[audio-dl] Job ${jobId} finished with warnings (code 1) but file exists.`);
           } else {
             console.error(`[audio-dl] File not found in tmpDir after exit code ${code}. stdout:\n${stdoutOutput}`);
-            jobs.set(jobId, { status: "error", error: "File not found after processing." });
+            jobs.set(jobId, { status: "error", error: "File not found after processing.", timestamp: Date.now() });
           }
         } else {
           const errMsg = (stderrOutput || stdoutOutput).trim().split("\n").slice(-5).join(" ").substring(0, 300);
           console.error(`[audio-dl] yt-dlp failed (code ${code}). Last output:\n${errMsg}`);
-          jobs.set(jobId, { status: "error", error: `Download failed: ${errMsg || `exit code ${code}`}` });
+          const safeErrorMsg = process.env.NODE_ENV === "production" ? "Download failed. Please try again." : `Download failed: ${errMsg || `exit code ${code}`}`;
+          jobs.set(jobId, { status: "error", error: safeErrorMsg, timestamp: Date.now() });
         }
       });
 
@@ -1041,10 +1134,12 @@ export async function registerRoutes(
   // Video Track Download Endpoint (for YouTube playlist items)
   app.post("/api/download/video-track", async (req, res) => {
     try {
-      const { url, resolution, audioFormat, title } = req.body;
-      if (!url) {
-        return res.status(400).json({ message: "Missing video URL." });
+      const parsedParams = DownloadVideoTrackSchema.safeParse(req.body);
+      if (!parsedParams.success) {
+        return res.status(400).json({ message: "Invalid input parameters", details: parsedParams.error.format() });
       }
+      const { url, resolution, audioFormat, title } = parsedParams.data;
+      const safeUrl = sanitizeUrl(url);
 
       const isAudioOnly = audioFormat && ["mp3", "m4a", "wav", "flac", "opus"].includes(audioFormat);
       const jobId = crypto.randomUUID();
@@ -1057,7 +1152,7 @@ export async function registerRoutes(
       const platform = detectPlatform(url);
       const cookieArgs = getCookieArgs(platform);
 
-      jobs.set(jobId, { status: "processing" });
+      jobs.set(jobId, { status: "processing", timestamp: Date.now() });
       res.status(200).json({ jobId });
 
       let args: string[];
@@ -1067,13 +1162,12 @@ export async function registerRoutes(
         const qualityMap: Record<string, string> = {
           mp3: "320K", m4a: "256K", opus: "256K", flac: "0", wav: "0",
         };
-        const audioQuality = qualityMap[audioFormat] || "0";
-        const supportsRichMeta = ["mp3", "m4a", "opus"].includes(audioFormat);
+        const audioQuality = audioFormat && qualityMap[audioFormat] ? qualityMap[audioFormat] : "0";
+        const supportsRichMeta = audioFormat ? ["mp3", "m4a", "opus"].includes(audioFormat) : false;
 
         args = [
           "-x",
-          "--audio-format", audioFormat,
-          "--audio-quality", audioQuality,
+          ...(audioFormat ? ["--audio-format", audioFormat, "--audio-quality", audioQuality] : []),
           "--no-playlist",
           "--socket-timeout", "30",
           "--retries", "2",
@@ -1081,7 +1175,8 @@ export async function registerRoutes(
           "--js-runtimes", "node",
           ...cookieArgs,
           "-o", outTemplate,
-          url
+          "--",
+          safeUrl
         ];
       } else {
         // Video download mode with resolution selection
@@ -1096,7 +1191,8 @@ export async function registerRoutes(
           "--js-runtimes", "node",
           ...cookieArgs,
           "-o", outTemplate,
-          url
+          "--",
+          safeUrl
         ];
       }
 
@@ -1111,7 +1207,7 @@ export async function registerRoutes(
       // Kill after 5 minutes for video downloads
       const killTimeout = setTimeout(() => {
         dlProcess.kill("SIGKILL");
-        jobs.set(jobId, { status: "error", error: "Download timed out after 5 minutes." });
+        jobs.set(jobId, { status: "error", error: "Download timed out after 5 minutes.", timestamp: Date.now() });
         console.error(`[video-track-dl] Job ${jobId} timed out and was killed.`);
       }, 5 * 60 * 1000);
 
@@ -1126,15 +1222,17 @@ export async function registerRoutes(
             jobs.set(jobId, {
               status: "completed",
               filePath: path.join(tmpDir, downloadedFile),
-              fileName: filename
+              fileName: filename,
+              timestamp: Date.now()
             });
           } else {
-            jobs.set(jobId, { status: "error", error: "File not found after processing." });
+            jobs.set(jobId, { status: "error", error: "File not found after processing.", timestamp: Date.now() });
           }
         } else {
           const errMsg = (stderrOutput || stdoutOutput).trim().split("\n").slice(-5).join(" ").substring(0, 300);
           console.error(`[video-track-dl] yt-dlp failed (code ${code}). Last output:\n${errMsg}`);
-          jobs.set(jobId, { status: "error", error: `Download failed: ${errMsg || `exit code ${code}`}` });
+          const safeErrorMsg = process.env.NODE_ENV === "production" ? "Download failed. Please try again." : `Download failed: ${errMsg || `exit code ${code}`}`;
+          jobs.set(jobId, { status: "error", error: safeErrorMsg, timestamp: Date.now() });
         }
       });
 
@@ -1148,12 +1246,31 @@ export async function registerRoutes(
   // Proxies image downloads through the server to avoid CORS issues
   app.get("/api/download/image", async (req, res) => {
     try {
-      const imageUrl = req.query.url as string;
+      const imageUrlStr = req.query.url as string;
       const filename = (req.query.filename as string) || "image";
       const ext = (req.query.ext as string) || "jpg";
 
-      if (!imageUrl) {
+      if (!imageUrlStr) {
         return res.status(400).json({ message: "Missing image URL." });
+      }
+
+      // Security check against SSRF
+      try {
+        const parsed = new NodeURL(imageUrlStr);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          throw new Error('Only http/https allowed');
+        }
+
+        const hostname = parsed.hostname;
+        if (isIP(hostname)) {
+          if (isPrivateIP(hostname)) throw new Error('Private IPs not allowed');
+        } else {
+          const addresses = await dns.resolve4(hostname);
+          if (addresses.some(isPrivateIP)) throw new Error('Domain resolves to private IP');
+        }
+      } catch (e: any) {
+        console.error("SSRF validation failed for proxy download:", e.message);
+        return res.status(400).json({ message: "Invalid or restricted image URL." });
       }
 
       const safeFilename = filename.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -1163,8 +1280,8 @@ export async function registerRoutes(
       res.setHeader("Content-Type", `image/${ext === "jpg" ? "jpeg" : ext}`);
 
       // Pipe the image through our server
-      const transport = imageUrl.startsWith("https") ? https : http;
-      transport.get(imageUrl, {
+      const transport = imageUrlStr.startsWith("https") ? https : http;
+      transport.get(imageUrlStr, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
