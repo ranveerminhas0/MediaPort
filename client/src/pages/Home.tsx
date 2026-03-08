@@ -11,6 +11,7 @@ import type { AppleMusicConfig } from "@/components/AppleMusicConfigModal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Features } from "@/components/Features";
 import { Loader2, Download, Search, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -261,6 +262,17 @@ export default function Home() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {!result && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.8 }}
+          >
+            <hr className="my-12 border-border/40" />
+            <Features />
+          </motion.div>
+        )}
       </main>
 
       {/* YouTube Playlist Config Modal */}
