@@ -95,7 +95,7 @@ export const Features = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <FeatureCard
-                    imageSrc="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop"
+                    imageSrc="https://images.unsplash.com/photo-1614853317094-072a63362e31?q=80&w=1000&auto=format&fit=crop"
                     topCorner="MediaPort Engine"
                     topCornerTitle={
                         <>
@@ -113,7 +113,7 @@ export const Features = () => {
                 />
 
                 <FeatureCard
-                    imageSrc="https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=1000&auto=format&fit=crop"
+                    imageSrc="https://images.unsplash.com/photo-1614854262178-03c96e9c8c28?q=80&w=1000&auto=format&fit=crop"
                     topCorner="Lossless Audio"
                     topCornerTitle={
                         <>
@@ -136,7 +136,7 @@ export const Features = () => {
                 />
 
                 <FeatureCard
-                    imageSrc="https://images.unsplash.com/photo-1523821741446-edb2b68bb7a0?q=80&w=1000&auto=format&fit=crop"
+                    imageSrc="https://images.unsplash.com/photo-1579547944212-c4f4961a8dd8?q=80&w=1000&auto=format&fit=crop"
                     topCorner="Direct Access"
                     topCornerTitle={
                         <>
