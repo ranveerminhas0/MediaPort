@@ -1038,15 +1038,11 @@ export async function registerRoutes(
       //   - Spotify / Apple Music: search YouTube for the track title and artist
       //   - Everything else: use the URL directly
       let targetUrl: string;
-      const isYouTubeRestricted = platform === "youtube_music" && url.includes("watch?v=") && !format; // If format is missing but it's a watch URL
-
-      if (platform === "spotify" || platform === "apple_music" || (platform === "youtube_music" && !format)) {
-        // Append artist if available for better search accuracy
+      if (platform === "spotify" || platform === "apple_music") {
+        // Search directly for Spotify/Apple Music
         const searchTerms = artist ? `${artist} - ${title}` : title || "unknown track";
-        // Combine Artist + Title for a precise search, bias toward official audio
-        const searchQuery = `ytsearch1:"${searchTerms} official audio"`;
-        targetUrl = searchQuery;
-        console.log(`[audio-dl] ${platform} ${format ? '' : '(restricted)'} detected, searching YouTube: ${searchQuery}`);
+        targetUrl = `ytsearch1:"${searchTerms} official audio"`;
+        console.log(`[audio-dl] ${platform} detected, searching YouTube: ${targetUrl}`);
       } else {
         targetUrl = safeUrl;
       }
@@ -1125,6 +1121,48 @@ export async function registerRoutes(
 
       dlProcess.on("close", (code) => {
         clearTimeout(killTimeout);
+
+        // FALLBACK: If YouTube Music download fails due to Premium restriction, retry via Search
+        if (code !== 0 && platform === "youtube_music" && stderrOutput.includes("Music Premium members")) {
+          console.log(`[audio-dl] Track restricted for ${jobId}, retrying with search...`);
+
+          const searchTerms = artist ? `${artist} - ${title}` : title || "YouTube Music track";
+          const searchQuery = `ytsearch1:"${searchTerms} official audio"`;
+
+          const retryArgs = [
+            "-x",
+            "--audio-format", format,
+            "--audio-quality", audioQuality,
+            "--no-playlist",
+            "--socket-timeout", "30",
+            "--retries", "2",
+            ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
+            "--js-runtimes", "node",
+            "--extractor-args", "youtube:player_client=web_music,default",
+            ...metadataArgs,
+            "-o", outTemplate,
+            "--",
+            searchQuery
+          ];
+
+          const retryProcess = spawn("yt-dlp", retryArgs);
+          let retryStderr = "";
+          retryProcess.stderr.on("data", (c) => retryStderr += c.toString());
+
+          retryProcess.on("close", (retryCode) => {
+            const files = fs.readdirSync(tmpDir);
+            const downloadedFile = files.find(f => f.startsWith(jobId));
+
+            if (retryCode === 0 && downloadedFile) {
+              jobs.set(jobId, { status: "completed", filePath: path.join(tmpDir, downloadedFile), fileName: filename, timestamp: Date.now() });
+              console.log(`[audio-dl] Retry successful for ${jobId}`);
+            } else {
+              const err = retryStderr.split("\n").slice(-3).join(" ");
+              jobs.set(jobId, { status: "error", error: `Search fallback failed: ${err}`, timestamp: Date.now() });
+            }
+          });
+          return;
+        }
 
         const files = fs.readdirSync(tmpDir);
         const downloadedFile = files.find(f => f.startsWith(jobId));
@@ -1241,6 +1279,54 @@ export async function registerRoutes(
 
       dlProcess.on("close", (code) => {
         clearTimeout(killTimeout);
+
+        // FALLBACK: If YouTube Music download fails due to Premium restriction, retry via Search
+        if (code !== 0 && platform === "youtube_music" && stderrOutput.includes("Music Premium members")) {
+          console.log(`[video-track-dl] Track restricted for ${jobId}, retrying with search...`);
+
+          const searchTerms = title || "YouTube Music track";
+          const searchQuery = `ytsearch1:"${searchTerms} official audio"`;
+
+          let retryArgs: string[];
+          if (isAudioOnly) {
+            const qualityMap: Record<string, string> = {
+              mp3: "320K", m4a: "256K", opus: "256K", flac: "0", wav: "0",
+            };
+            const aQual = audioFormat && qualityMap[audioFormat] ? qualityMap[audioFormat] : "0";
+            retryArgs = [
+              "-x",
+              ...(audioFormat ? ["--audio-format", audioFormat, "--audio-quality", aQual] : []),
+              "--no-playlist", "--js-runtimes", "node",
+              "--extractor-args", "youtube:player_client=web_music,default",
+              ...cookieArgs, "-o", outTemplate, "--", searchQuery
+            ];
+          } else {
+            const rh = resolution || "1080";
+            retryArgs = [
+              "-f", `bestvideo[height<=${rh}]+bestaudio/best[height<=${rh}]`,
+              "--merge-output-format", "mp4", "--js-runtimes", "node",
+              "--extractor-args", "youtube:player_client=web_music,default",
+              ...cookieArgs, "-o", outTemplate, "--", searchQuery
+            ];
+          }
+
+          const retryProc = spawn("yt-dlp", retryArgs);
+          let rStderr = "";
+          retryProc.stderr.on("data", (c) => rStderr += c.toString());
+
+          retryProc.on("close", (rCode) => {
+            const files = fs.readdirSync(tmpDir);
+            const downloadedFile = files.find(f => f.startsWith(jobId));
+
+            if (rCode === 0 && downloadedFile) {
+              jobs.set(jobId, { status: "completed", filePath: path.join(tmpDir, downloadedFile), fileName: filename, timestamp: Date.now() });
+              console.log(`[video-track-dl] Retry successful for ${jobId}`);
+            } else {
+              jobs.set(jobId, { status: "error", error: "Search fallback failed.", timestamp: Date.now() });
+            }
+          });
+          return;
+        }
 
         const files = fs.readdirSync(tmpDir);
         const downloadedFile = files.find(f => f.startsWith(jobId));
