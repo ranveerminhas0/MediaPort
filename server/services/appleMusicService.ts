@@ -104,9 +104,16 @@ export async function getTrackMetadata(url: string): Promise<AppleMusicTrackMeta
         }
     }
 
-    // Clean "Apple Music" suffix from title
-    title = title.replace(/\s*on\s+Apple.{0,3}Music\s*$/i, "").trim();
-    title = title.replace(/\s*[-–—]\s*Apple.{0,3}Music\s*$/i, "").trim();
+    // Clean metadata noise
+    const cleanMetadata = (str: string) => {
+        return str
+            .replace(/\s*[\[\(]Explicit[\]\)]\s*/gi, "")
+            .replace(/\s*on\s+Apple.{0,3}Music\s*$/i, "")
+            .replace(/\s*[-–—]\s*Apple.{0,3}Music\s*$/i, "")
+            .trim();
+    };
+
+    title = cleanMetadata(title);
 
     // Try to parse duration and album from page JSON-LD
     let durationSec = 240;
@@ -511,12 +518,23 @@ export async function extractAppleMusicPlaylist(url: string): Promise<{
                     return el ? el.getAttribute('content') : '';
                 };
                 
-                const titleValue = getMeta('og:title') || '';
-                const titleMatch = titleValue.replace(/\\s*on\\s+Apple.{0,3}Music\\s*$/i, "").trim();
+                const ogTitle = getMeta('og:title') || '';
+                // "Title by Artist on Apple Music"
+                const byMatch = ogTitle.match(/^(.+?)\s+by\s+(.+?)(?:\s+on\s+|$)/i);
+                const artistFallback = byMatch ? byMatch[2].trim() : '';
+
+                const cleanTitle = (str) => {
+                    return str
+                        .replace(/\\s*[\\[\\(]Explicit[\\]\\)]\\s*/gi, "")
+                        .replace(/\\s*on\\s+Apple.{0,3}Music\\s*$/i, "")
+                        .trim();
+                };
+                const titleMatch = cleanTitle(ogTitle);
                 
                 return {
                     title: titleMatch || 'Unknown Apple Music Playlist',
                     thumbnail: getMeta('og:image') || '',
+                    artistFallback: artistFallback
                 };
             })();
         `) as any;
@@ -554,14 +572,44 @@ export async function extractAppleMusicPlaylist(url: string): Promise<{
                     
                     if (!titleEl || !titleEl.textContent) continue;
                     
-                    const titleText = titleEl.textContent.trim();
+                    const cleanTitle = (str) => {
+                        return str
+                            .replace(/\\s*[\\[\\(]Explicit[\\]\\)]\\s*/gi, "")
+                            .trim();
+                    };
+
+                    const titleText = cleanTitle(titleEl.textContent);
                     if (titleText === 'Song' || titleText === 'Title') continue;
 
                     const artistEl = row.querySelector('.songs-list-row__by-line') ||
-                                     row.querySelector('div[data-testid="track-artist"]') ||
-                                     row.querySelector('.songs-list-row__link');
+                                     row.querySelector('div[data-testid="track-artist"]');
                     
-                    const artistText = artistEl && artistEl.textContent ? artistEl.textContent.trim() : 'Unknown Artist';
+                    let artistText = 'Unknown Artist';
+                    if (artistEl) {
+                        const artistLinks = Array.from(artistEl.querySelectorAll('a'));
+                        if (artistLinks.length > 0) {
+                            artistText = artistLinks.map(a => a.textContent.trim()).join(', ');
+                        } else {
+                            artistText = artistEl.textContent.trim();
+                        }
+                    }
+
+                    // Fallback 1: Parse Play button ARIA label (often contains "Play {song} by {artist}")
+                    if (artistText === 'Unknown Artist') {
+                        const playBtn = row.querySelector('button[aria-label^="Play"]');
+                        if (playBtn) {
+                            const label = playBtn.getAttribute('aria-label') || '';
+                            const playMatch = label.match(/Play\\s+(.+?)\\s+by\\s+(.+?)$/i);
+                            if (playMatch) {
+                                artistText = playMatch[2].trim();
+                            }
+                        }
+                    }
+
+                    // Fallback 2: Use metadata fallback (album artist)
+                    if (artistText === 'Unknown Artist' && meta.artistFallback) {
+                        artistText = meta.artistFallback;
+                    }
 
                     let timeEl = row.querySelector('time');
                     if (!timeEl) {
@@ -586,7 +634,8 @@ export async function extractAppleMusicPlaylist(url: string): Promise<{
                         }
                     }
 
-                    const linkEl = row.querySelector('a[href*="/song/"]');
+                    const linkEl = row.querySelector('a[href*="/song/"]') || 
+                                   row.querySelector('a.click-action[href*="/song/"]');
                     let trackId = 'am_track_' + (titleText + artistText).replace(/[^a-zA-Z0-9]/g, '').substring(0, 15);
                     let trackUrl = '';
 

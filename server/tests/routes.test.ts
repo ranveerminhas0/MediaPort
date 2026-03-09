@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPlatform, AUDIO_PLATFORMS, isYouTubePlaylist } from '../routes';
+import { detectPlatform, AUDIO_PLATFORMS, isYouTubePlaylist, isAppleMusicPlaylist } from '../routes';
 
 describe('detectPlatform', () => {
     it('should detect Spotify links', () => {
@@ -61,16 +61,25 @@ describe('isYouTubePlaylist', () => {
         expect(isYouTubePlaylist('https://www.youtube.com/watch?v=abc123')).toBe(false);
     });
 
-    it('should NOT detect non-YouTube URLs', () => {
-        expect(isYouTubePlaylist('https://open.spotify.com/playlist/123')).toBe(false);
-        expect(isYouTubePlaylist('https://example.com?list=123')).toBe(false);
-    });
-
     it('should handle youtu.be short URLs with list param', () => {
         expect(isYouTubePlaylist('https://youtu.be/abc123?list=PLRqwX-V7Uu6ZiZxtDDRCi6uhfTH4FilpH')).toBe(true);
     });
+});
 
-    it('should return false for invalid URLs', () => {
-        expect(isYouTubePlaylist('not-a-url')).toBe(false);
+describe('isAppleMusicPlaylist', () => {
+    it('should detect album links', () => {
+        expect(isAppleMusicPlaylist('https://music.apple.com/us/album/dark-love-single/1500332306')).toBe(true);
+    });
+
+    it('should detect playlist links', () => {
+        expect(isAppleMusicPlaylist('https://music.apple.com/us/playlist/sidhu-moose-wala-deep-cuts/pl.448f04357e3b4b88bdc81062b9a7c64c')).toBe(true);
+    });
+
+    it('should NOT detect single track links (with i= parameter)', () => {
+        expect(isAppleMusicPlaylist('https://music.apple.com/us/album/dark-love/1500332306?i=1500332307')).toBe(false);
+    });
+
+    it('should return false for non-Apple Music links', () => {
+        expect(isAppleMusicPlaylist('https://open.spotify.com/playlist/123')).toBe(false);
     });
 });

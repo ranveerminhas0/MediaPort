@@ -67,12 +67,14 @@ export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfi
                         url: track.url,
                         audioFormat: config.audioFormat,
                         title: track.title,
+                        duration: track.duration,
                     };
                 } else {
                     body = {
                         url: track.url,
                         resolution: config.resolution,
                         title: track.title,
+                        duration: track.duration,
                     };
                 }
             } else if (isAppleMusic) {
@@ -81,11 +83,12 @@ export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfi
 
                 endpoint = "/api/download/audio";
                 body = {
-                    url: track.url || `https://music.apple.com/search?term=${encodeURIComponent(track.title + ' ' + track.artist)}`,
+                    url: track.url,
                     format: finalFormat,
                     title: track.title,
                     artist: track.artist,
                     album: track.album,
+                    duration: track.duration,
                 };
             } else {
                 // Spotify playlist: use the audio endpoint
@@ -96,6 +99,7 @@ export function PlaylistTracks({ tracks, playlistTitle, extractor, playlistConfi
                     title: track.title,
                     artist: track.artist,
                     album: track.album,
+                    duration: track.duration,
                 };
             }
 

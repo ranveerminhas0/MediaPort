@@ -28,6 +28,11 @@ vite.config.ts.*
 *.swo
 *~
 
+# Temporary files
+*temporary
+*tmp
+
+
 # Logs
 *.log
 npm-debug.log*

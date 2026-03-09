@@ -49,7 +49,7 @@ export function AudioFormats({ audioFormats, title, url, artist, album, year, ex
             const res = await fetch("/api/download/audio", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url, format, title, artist, album, year }),
+                body: JSON.stringify({ url, format, title, artist, album, year, duration }),
             });
             if (!res.ok) throw new Error("Failed to start audio processing");
 

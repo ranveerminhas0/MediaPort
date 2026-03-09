@@ -84,14 +84,16 @@ const DownloadAudioSchema = z.object({
   title: z.string().optional(),
   artist: z.string().optional(),
   album: z.string().optional(),
-  year: z.string().optional()
+  year: z.string().optional(),
+  duration: z.number().optional()
 });
 
 const DownloadVideoTrackSchema = z.object({
   url: z.string().url(),
   resolution: z.string().optional(),
   audioFormat: z.string().optional(),
-  title: z.string().optional()
+  title: z.string().optional(),
+  duration: z.number().optional()
 });
 
 // Platform Detection
@@ -158,6 +160,8 @@ export function isAppleMusicPlaylist(url: string): boolean {
   try {
     const urlObj = new URL(url);
     if (!urlObj.hostname.includes("music.apple.com")) return false;
+    // If it has a track ID parameter 'i', it's a single track, not a playlist/album view
+    if (urlObj.searchParams.has("i")) return false;
     return urlObj.pathname.includes("/playlist/") ||
       urlObj.pathname.includes("/album/") ||
       urlObj.pathname.includes("/station/");
@@ -1011,7 +1015,7 @@ export async function registerRoutes(
       if (!parsedParams.success) {
         return res.status(400).json({ message: "Invalid input parameters", details: parsedParams.error.format() });
       }
-      const { url, format, title, artist, album, year } = parsedParams.data;
+      const { url, format, title, artist, album, year, duration } = parsedParams.data;
       const safeUrl = sanitizeUrl(url);
 
       // Guard: apple_flac_lossless uses its own dedicated recording pipeline
@@ -1083,6 +1087,11 @@ export async function registerRoutes(
 
       if (hasFfArgs) {
         metadataArgs.push("--postprocessor-args", ffArgs);
+      }
+
+      // Add duration filter if provided (±10 seconds)
+      if (duration && duration > 0) {
+        metadataArgs.push("--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`);
       }
 
       const args = [
@@ -1202,7 +1211,7 @@ export async function registerRoutes(
       if (!parsedParams.success) {
         return res.status(400).json({ message: "Invalid input parameters", details: parsedParams.error.format() });
       }
-      const { url, resolution, audioFormat, title } = parsedParams.data;
+      const { url, resolution, audioFormat, title, duration } = parsedParams.data;
       const safeUrl = sanitizeUrl(url);
 
       const isAudioOnly = audioFormat && ["mp3", "m4a", "wav", "flac", "opus"].includes(audioFormat);
@@ -1239,6 +1248,7 @@ export async function registerRoutes(
           "--js-runtimes", "node",
           "--extractor-args", "youtube:player_client=web_music,default",
           ...cookieArgs,
+          ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
           "-o", outTemplate,
           "--",
           safeUrl
@@ -1256,6 +1266,7 @@ export async function registerRoutes(
           "--js-runtimes", "node",
           "--extractor-args", "youtube:player_client=web_music,default",
           ...cookieArgs,
+          ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
           "-o", outTemplate,
           "--",
           safeUrl
@@ -1298,7 +1309,9 @@ export async function registerRoutes(
               ...(audioFormat ? ["--audio-format", audioFormat, "--audio-quality", aQual] : []),
               "--no-playlist", "--js-runtimes", "node",
               "--extractor-args", "youtube:player_client=web_music,default",
-              ...cookieArgs, "-o", outTemplate, "--", searchQuery
+              ...cookieArgs,
+              ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
+              "-o", outTemplate, "--", searchQuery
             ];
           } else {
             const rh = resolution || "1080";
@@ -1306,7 +1319,9 @@ export async function registerRoutes(
               "-f", `bestvideo[height<=${rh}]+bestaudio/best[height<=${rh}]`,
               "--merge-output-format", "mp4", "--js-runtimes", "node",
               "--extractor-args", "youtube:player_client=web_music,default",
-              ...cookieArgs, "-o", outTemplate, "--", searchQuery
+              ...cookieArgs,
+              ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
+              "-o", outTemplate, "--", searchQuery
             ];
           }
 
