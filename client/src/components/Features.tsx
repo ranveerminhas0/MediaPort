@@ -8,7 +8,7 @@ interface FeatureCardProps {
     subtitle: string;
     bottomLeftValue: string;
     bottomLeftLabel: string;
-    bottomRight: string;
+    bottomRight: React.ReactNode;
     delay?: number;
 }
 
@@ -73,12 +73,12 @@ const FeatureCard = ({
                     {subtitle}
                 </p>
 
-                <div className="mt-auto pt-10 flex justify-between items-end">
-                    <div className="flex items-baseline">
-                        <span className="text-6xl font-black tracking-tighter">{bottomLeftValue}</span>
-                        <span className="text-muted-foreground ml-2 font-semibold text-lg">{bottomLeftLabel}</span>
+                <div className="mt-auto pt-8 flex justify-between items-end gap-x-2">
+                    <div className="flex items-baseline shrink-0">
+                        <span className="text-5xl lg:text-6xl font-black tracking-tighter">{bottomLeftValue}</span>
+                        <span className="text-muted-foreground ml-2 font-semibold text-base lg:text-lg">{bottomLeftLabel}</span>
                     </div>
-                    <div className="text-lg font-bold tracking-tight pb-2">{bottomRight}</div>
+                    <div className="text-base lg:text-lg font-bold tracking-tight pb-1 pr-1 text-right shrink-0">{bottomRight}</div>
                 </div>
             </div>
         </motion.div>
@@ -126,7 +126,12 @@ export const Features = () => {
                     subtitle="Extract pure FLAC, WAV, and crystal clear 4K MP4 videos."
                     bottomLeftValue="02"
                     bottomLeftLabel="Qual"
-                    bottomRight="Up to 9000kbps"
+                    bottomRight={
+                        <>
+                            Up to<br />
+                            9000kbps
+                        </>
+                    }
                     delay={0.15}
                 />
 
@@ -144,7 +149,12 @@ export const Features = () => {
                     subtitle="Ad-free, streamlined workflows. No middleman, no delays."
                     bottomLeftValue="03"
                     bottomLeftLabel="Spd"
-                    bottomRight="Instant Process"
+                    bottomRight={
+                        <>
+                            Instant<br />
+                            Process
+                        </>
+                    }
                     delay={0.3}
                 />
             </div>

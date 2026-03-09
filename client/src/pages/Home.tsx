@@ -270,7 +270,7 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.8 }}
-            className="w-full max-w-5xl mx-auto px-6 mt-12"
+            className="w-full max-w-6xl mx-auto px-6 mt-12"
           >
             <hr className="mb-16 border-border/40" />
             <Features />
