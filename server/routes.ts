@@ -197,6 +197,8 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
       "--no-playlist",
       "--geo-bypass",
       "--js-runtimes", "node",
+      "--extractor-args", "youtube:player_client=web_music,default",
+      "--ignore-no-formats-error",
       ...cookieArgs,
       "--",
       safeUrl
@@ -247,7 +249,10 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
     thumbnail: data.thumbnail?.toString(),
     extractor: data.extractor?.toString(),
     formats,
-    hasVideo
+    hasVideo,
+    artist: data.uploader?.toString() || data.artist?.toString(),
+    duration: data.duration ? Number(data.duration) : undefined,
+    isRestricted: formats.length === 0 && !data.url
   };
 }
 
@@ -261,6 +266,8 @@ async function extractYtPlaylist(url: string, cookieArgs: string[]) {
     "--dump-json",
     "--geo-bypass",
     "--js-runtimes", "node",
+    "--extractor-args", "youtube:player_client=web_music,default",
+    "--ignore-no-formats-error",
     ...cookieArgs,
     "--",
     safeUrl
@@ -766,6 +773,9 @@ export async function registerRoutes(
             mediaType: "audio",
             formats: [],
             audioFormats: AUDIO_OUTPUT_FORMATS,
+            artist: ytResult.artist,
+            duration: ytResult.duration,
+            isRestricted: ytResult.isRestricted
           });
         } catch (ytErr) {
           console.error(`[extract] yt-dlp failed for audio platform ${platform}:`, ytErr);
@@ -936,6 +946,7 @@ export async function registerRoutes(
         "-f", formatId,
         "--merge-output-format", "mp4",
         "--js-runtimes", "node",
+        "--extractor-args", "youtube:player_client=web_music,default",
         ...cookieArgs,
         "-o", outTemplate,
         "--",
@@ -1027,13 +1038,15 @@ export async function registerRoutes(
       //   - Spotify / Apple Music: search YouTube for the track title and artist
       //   - Everything else: use the URL directly
       let targetUrl: string;
-      if (platform === "spotify" || platform === "apple_music") {
+      const isYouTubeRestricted = platform === "youtube_music" && url.includes("watch?v=") && !format; // If format is missing but it's a watch URL
+
+      if (platform === "spotify" || platform === "apple_music" || (platform === "youtube_music" && !format)) {
         // Append artist if available for better search accuracy
-        const searchTerms = artist ? `${artist} ${title}` : title || "unknown track";
-        // Append "audio" to bias YouTube search towards music, not random videos
-        const searchQuery = `ytsearch1:${searchTerms} audio`;
+        const searchTerms = artist ? `${artist} - ${title}` : title || "unknown track";
+        // Combine Artist + Title for a precise search, bias toward official audio
+        const searchQuery = `ytsearch1:"${searchTerms} official audio"`;
         targetUrl = searchQuery;
-        console.log(`[audio-dl] ${platform} detected, searching YouTube: ${searchQuery}`);
+        console.log(`[audio-dl] ${platform} ${format ? '' : '(restricted)'} detected, searching YouTube: ${searchQuery}`);
       } else {
         targetUrl = safeUrl;
       }
@@ -1085,6 +1098,7 @@ export async function registerRoutes(
         "--retries", "2",
         ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
         "--js-runtimes", "node",
+        "--extractor-args", "youtube:player_client=web_music,default",
         ...metadataArgs,
         // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
         ...((platform === "spotify" || platform === "apple_music") ? [] : cookieArgs),
@@ -1185,6 +1199,7 @@ export async function registerRoutes(
           "--retries", "2",
           ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
           "--js-runtimes", "node",
+          "--extractor-args", "youtube:player_client=web_music,default",
           ...cookieArgs,
           "-o", outTemplate,
           "--",
@@ -1201,6 +1216,7 @@ export async function registerRoutes(
           "--socket-timeout", "30",
           "--retries", "2",
           "--js-runtimes", "node",
+          "--extractor-args", "youtube:player_client=web_music,default",
           ...cookieArgs,
           "-o", outTemplate,
           "--",
