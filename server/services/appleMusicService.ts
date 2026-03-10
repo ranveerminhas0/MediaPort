@@ -42,12 +42,18 @@ export interface AppleMusicTrackMetadata {
  * Fetches track metadata from an Apple Music URL by scraping the public page.
  */
 export async function getTrackMetadata(url: string): Promise<AppleMusicTrackMetadata> {
-    const curlResult = await execAsync(
-        `powershell -Command "(Invoke-WebRequest -Uri '${url}' -UseBasicParsing -Headers @{'User-Agent'='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}).Content"`,
-        { maxBuffer: 5 * 1024 * 1024 }
-    );
+    // Use fetch() for cross-platform compatibility (works on Linux/Docker, not just Windows)
+    const response = await fetch(url, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+    });
 
-    const html = curlResult.stdout;
+    if (!response.ok) {
+        throw new Error(`Failed to fetch Apple Music page: HTTP ${response.status}`);
+    }
+
+    const html = await response.text();
 
     // Parse Open Graph meta tags — handle both attribute orderings
     const getMetaContent = (property: string): string | undefined => {

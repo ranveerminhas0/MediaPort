@@ -1,8 +1,13 @@
 # Use the official Node.js 20 image based on Debian Bookworm
 FROM node:20-bookworm-slim
 
-# Install necessary libraries for Puppeteer to run Chromium
+# Install system dependencies:
+#  - Puppeteer/Chromium needs a long list of shared libraries
+#  - Python3 + pip for yt-dlp and gallery-dl
+#  - ffmpeg for audio/video post-processing
+#  - curl/wget for general use
 RUN apt-get update && apt-get install -y \
+    # Puppeteer / Chromium dependencies
     ca-certificates \
     fonts-liberation \
     libasound2 \
@@ -37,10 +42,23 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libxtst6 \
     lsb-release \
-    wget \
     xdg-utils \
+    # FFmpeg for audio/video processing (used by yt-dlp and Apple Music service)
+    ffmpeg \
+    # Python3 for yt-dlp and gallery-dl
+    python3 \
+    python3-pip \
+    python3-venv \
+    # General utilities
+    wget \
+    curl \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+
+# Install yt-dlp and gallery-dl via pip
+RUN pip3 install --no-cache-dir --break-system-packages \
+    yt-dlp \
+    gallery-dl
 
 # Set the working directory
 WORKDIR /app
@@ -52,10 +70,10 @@ RUN npm install
 # Copy the rest of the application code
 COPY . .
 
-# Build the frontend and backend 
+# Build the frontend and backend
 RUN npm run build
 
-# Render sets the PORT dynamically, so we just use 3000 as a default for documentation
+# Render sets the PORT dynamically, default to 3000
 EXPOSE 3000
 
 # Set environment variables
