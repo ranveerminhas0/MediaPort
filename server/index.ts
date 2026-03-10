@@ -102,7 +102,7 @@ import { registerAppleMusicRoutes } from "./routes/appleMusicRoutes";
     await setupVite(httpServer, app);
   }
 
-  const port = 3000;
+  const port = parseInt(process.env.PORT || "3000", 10);
   httpServer.listen(
     {
       port,

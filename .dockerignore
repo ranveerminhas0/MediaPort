@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+tmp
+coverage
+npm-debug.log
+yarn-error.log
+.replit
+replit.md
