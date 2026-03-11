@@ -18,6 +18,8 @@ vi.mock('lucide-react', () => ({
     Music: () => <div data-testid="music-icon" />,
     Loader2: () => <div data-testid="loader-icon" />,
     Disc3: () => <div data-testid="disc-icon" />,
+    X: () => <div data-testid="x-icon" />,
+    AlertTriangle: () => <div data-testid="alert-icon" />,
 }));
 
 // Mock framer-motion to avoid animation issues in tests
@@ -25,6 +27,7 @@ vi.mock('framer-motion', () => ({
     motion: {
         div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
     },
+    AnimatePresence: ({ children }: any) => <>{children}</>,
 }));
 
 describe('AudioFormats Component', () => {

@@ -189,7 +189,7 @@ function getCookiePath(): string | undefined {
   return undefined;
 }
 
-function getCookieArgs(platform: Platform): string[] {
+function getCookieArgs(): string[] {
   const cookieFile = getCookiePath();
   if (cookieFile) {
     return ["--cookies", cookieFile];
@@ -202,6 +202,29 @@ function getCookieArgs(platform: Platform): string[] {
   return [];
 }
 
+// Realistic browser User-Agent to avoid bot detection
+const YTDLP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// Proxy support via environment variable
+function getProxyArgs(): string[] {
+  const proxyUrl = process.env.PROXY_URL;
+  if (proxyUrl) {
+    return ["--proxy", proxyUrl];
+  }
+  return [];
+}
+
+// Common yt-dlp args shared by ALL invocations (extraction + download)
+function getCommonYtDlpArgs(playerClient: string = "web,default"): string[] {
+  return [
+    "--js-runtimes", "node",
+    "--extractor-args", `youtube:player_client=${playerClient}`,
+    "--user-agent", YTDLP_USER_AGENT,
+    "--impersonate", "chrome",
+    ...getProxyArgs(),
+  ];
+}
+
 // yt-dlp Extraction
 
 async function extractWithYtDlp(url: string, cookieArgs: string[]) {
@@ -212,9 +235,8 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
       "--dump-json",
       "--no-playlist",
       "--geo-bypass",
-      "--js-runtimes", "node",
-      "--extractor-args", "youtube:player_client=ios,default",
       "--ignore-no-formats-error",
+      ...getCommonYtDlpArgs(),
       ...cookieArgs,
       "--",
       safeUrl
@@ -281,9 +303,8 @@ async function extractYtPlaylist(url: string, cookieArgs: string[]) {
     "--flat-playlist",
     "--dump-json",
     "--geo-bypass",
-    "--js-runtimes", "node",
-    "--extractor-args", "youtube:player_client=web_music,default",
     "--ignore-no-formats-error",
+    ...getCommonYtDlpArgs("web_music,default"),
     ...cookieArgs,
     "--",
     safeUrl
@@ -421,7 +442,7 @@ export async function registerRoutes(
     try {
       const input = api.extract.input.parse(req.body);
       const platform = detectPlatform(input.url);
-      const cookieArgs = getCookieArgs(platform);
+      const cookieArgs = getCookieArgs();
 
       console.log(`[extract] Platform detected: ${platform} for URL: ${input.url}`);
 
@@ -956,13 +977,12 @@ export async function registerRoutes(
       res.status(200).json({ jobId });
 
       const platform = detectPlatform(safeUrl);
-      const cookieArgs = getCookieArgs(platform);
+      const cookieArgs = getCookieArgs();
 
       const args = [
         "-f", formatId,
         "--merge-output-format", "mp4",
-        "--js-runtimes", "node",
-        "--extractor-args", "youtube:player_client=ios,default",
+        ...getCommonYtDlpArgs(),
         ...cookieArgs,
         "-o", outTemplate,
         "--",
@@ -1048,7 +1068,7 @@ export async function registerRoutes(
       res.status(200).json({ jobId });
 
       const outTemplate = path.join(tmpDir, `${jobId}.%(ext)s`);
-      const cookieArgs = getCookieArgs(platform);
+      const cookieArgs = getCookieArgs();
 
       // Build the actual yt-dlp target URL
       //   - Spotify / Apple Music: search YouTube for the track title and artist
@@ -1112,13 +1132,12 @@ export async function registerRoutes(
         "--audio-quality", audioQuality,
         "--no-playlist",
         "--socket-timeout", "30",
-        "--retries", "2",
+        "--retries", "3",
+        "--sleep-interval", "1",
         ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
-        "--js-runtimes", "node",
-        "--extractor-args", "youtube:player_client=ios,default",
+        ...getCommonYtDlpArgs(),
         ...metadataArgs,
-        // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
-        ...((platform === "spotify" || platform === "apple_music") ? [] : cookieArgs),
+        ...cookieArgs,
         "-o", outTemplate,
         "--",
         targetUrl
@@ -1156,11 +1175,12 @@ export async function registerRoutes(
             "--audio-quality", audioQuality,
             "--no-playlist",
             "--socket-timeout", "30",
-            "--retries", "2",
+            "--retries", "3",
+            "--sleep-interval", "3",
             ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
-            "--js-runtimes", "node",
-            "--extractor-args", "youtube:player_client=ios,default",
+            ...getCommonYtDlpArgs(),
             ...metadataArgs,
+            ...cookieArgs,
             "-o", outTemplate,
             "--",
             searchQuery
@@ -1235,7 +1255,7 @@ export async function registerRoutes(
       const outTemplate = path.join(tmpDir, `${jobId}.%(ext)s`);
 
       const platform = detectPlatform(url);
-      const cookieArgs = getCookieArgs(platform);
+      const cookieArgs = getCookieArgs();
 
       jobs.set(jobId, { status: "processing", timestamp: Date.now() });
       res.status(200).json({ jobId });
@@ -1255,10 +1275,10 @@ export async function registerRoutes(
           ...(audioFormat ? ["--audio-format", audioFormat, "--audio-quality", audioQuality] : []),
           "--no-playlist",
           "--socket-timeout", "30",
-          "--retries", "2",
+          "--retries", "3",
+          "--sleep-interval", "1",
           ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
-          "--js-runtimes", "node",
-          "--extractor-args", "youtube:player_client=web_music,default",
+          ...getCommonYtDlpArgs("web_music,default"),
           ...cookieArgs,
           ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
           "-o", outTemplate,
@@ -1274,9 +1294,9 @@ export async function registerRoutes(
           "--postprocessor-args", "ffmpeg:-c:a aac -b:a 256k",
           "--no-playlist",
           "--socket-timeout", "30",
-          "--retries", "2",
-          "--js-runtimes", "node",
-          "--extractor-args", "youtube:player_client=web_music,default",
+          "--retries", "3",
+          "--sleep-interval", "1",
+          ...getCommonYtDlpArgs("web_music,default"),
           ...cookieArgs,
           ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
           "-o", outTemplate,
@@ -1319,8 +1339,9 @@ export async function registerRoutes(
             retryArgs = [
               "-x",
               ...(audioFormat ? ["--audio-format", audioFormat, "--audio-quality", aQual] : []),
-              "--no-playlist", "--js-runtimes", "node",
-              "--extractor-args", "youtube:player_client=web_music,default",
+              "--no-playlist",
+              "--sleep-interval", "3",
+              ...getCommonYtDlpArgs("web_music,default"),
               ...cookieArgs,
               ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
               "-o", outTemplate, "--", searchQuery
@@ -1329,8 +1350,9 @@ export async function registerRoutes(
             const rh = resolution || "1080";
             retryArgs = [
               "-f", `bestvideo[height<=${rh}]+bestaudio/best[height<=${rh}]`,
-              "--merge-output-format", "mp4", "--js-runtimes", "node",
-              "--extractor-args", "youtube:player_client=web_music,default",
+              "--merge-output-format", "mp4",
+              "--sleep-interval", "3",
+              ...getCommonYtDlpArgs("web_music,default"),
               ...cookieArgs,
               ...(duration && duration > 0 ? ["--match-filter", `duration > ${Math.max(0, duration - 10)} & duration < ${duration + 10}`] : []),
               "-o", outTemplate, "--", searchQuery

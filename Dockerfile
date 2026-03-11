@@ -60,6 +60,12 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     yt-dlp \
     gallery-dl
 
+# Always get the absolute latest yt-dlp (bypasses pip cache)
+RUN pip3 install --no-cache-dir --break-system-packages -U yt-dlp
+
+# Install curl_cffi for yt-dlp --impersonate support
+RUN pip3 install --no-cache-dir --break-system-packages curl_cffi
+
 # Set the working directory
 WORKDIR /app
 
