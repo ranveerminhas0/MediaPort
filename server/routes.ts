@@ -181,13 +181,25 @@ const AUDIO_OUTPUT_FORMATS = [
 
 // Cookie Args Helper
 
-function getCookieArgs(platform: Platform): string[] {
-  // Skip cookies for YouTube and YouTube Music to avoid n-sig challenge crashes
-  if (platform === "youtube" || platform === "youtube_music") return [];
+function getCookiePath(): string | undefined {
+  const localCookiePath = path.join(process.cwd(), "cookies.txt");
+  const renderCookiePath = "/etc/secrets/cookies.txt";
+  if (fs.existsSync(localCookiePath)) return localCookiePath;
+  if (fs.existsSync(renderCookiePath)) return renderCookiePath;
+  return undefined;
+}
 
-  return fs.existsSync(path.join(process.cwd(), "cookies.txt"))
-    ? ["--cookies", path.join(process.cwd(), "cookies.txt")]
-    : ["--cookies-from-browser", process.env.COOKIES_BROWSER || "chrome"];
+function getCookieArgs(platform: Platform): string[] {
+  const cookieFile = getCookiePath();
+  if (cookieFile) {
+    return ["--cookies", cookieFile];
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return ["--cookies-from-browser", process.env.COOKIES_BROWSER || "chrome"];
+  }
+
+  return [];
 }
 
 // yt-dlp Extraction
@@ -333,10 +345,10 @@ async function extractYtPlaylist(url: string, cookieArgs: string[]) {
 
 async function extractWithGalleryDl(url: string, cookieArgs: string[]) {
   const safeUrl = sanitizeUrl(url);
-  // gallery-dl uses --cookies (same Netscape format), not --cookies-from-browser (fck it)
+  // gallery-dl uses --cookies (same Netscape format), not --cookies-from-browser
   const gdlCookieArgs: string[] = [];
-  const cookiePath = path.join(process.cwd(), "cookies.txt");
-  if (fs.existsSync(cookiePath)) {
+  const cookiePath = getCookiePath();
+  if (cookiePath) {
     gdlCookieArgs.push("--cookies", cookiePath);
   }
 
