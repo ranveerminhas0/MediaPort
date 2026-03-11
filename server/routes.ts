@@ -205,13 +205,16 @@ function getCookieArgs(): string[] {
 // Realistic browser User-Agent to avoid bot detection
 const YTDLP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-// Proxy support via environment variable
+// Proxy support via environment variable (supports comma-separated list)
 function getProxyArgs(): string[] {
-  const proxyUrl = process.env.PROXY_URL;
-  if (proxyUrl) {
-    return ["--proxy", proxyUrl];
-  }
-  return [];
+  const proxyString = process.env.PROXY_URL;
+  if (!proxyString) return [];
+
+  const proxies = proxyString.split(',').map(p => p.trim()).filter(Boolean);
+  if (proxies.length === 0) return [];
+
+  const selectedProxy = proxies[Math.floor(Math.random() * proxies.length)];
+  return ["--proxy", selectedProxy];
 }
 
 // Common yt-dlp args shared by ALL invocations (extraction + download)
