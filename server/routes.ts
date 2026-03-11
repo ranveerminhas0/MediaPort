@@ -220,7 +220,11 @@ function getProxyArgs(): string[] {
 // Common yt-dlp args shared by ALL invocations (extraction + download)
 function getCommonYtDlpArgs(playerClient: string = "web,default"): string[] {
   return [
-    "--js-runtimes", "node",
+    // Required for YouTube "n challenge" solving (EJS). Deno is yt-dlp's recommended runtime.
+    "--js-runtimes", "deno",
+    // Allow yt-dlp to fetch the EJS challenge solver scripts at runtime.
+    // (Required when the script distribution is not bundled with the installed yt-dlp package.)
+    "--remote-components", "ejs:github",
     "--extractor-args", `youtube:player_client=${playerClient}`,
     "--user-agent", YTDLP_USER_AGENT,
     "--impersonate", "chrome",
@@ -848,6 +852,13 @@ export async function registerRoutes(
 
         console.log(`[extract] Using yt-dlp (primary) for ${platform}`);
         const ytResult = await extractWithYtDlp(input.url, cookieArgs);
+
+        if (platform === "youtube" && (ytResult.isRestricted || ytResult.formats.length === 0)) {
+          return res.status(502).json({
+            message:
+              "YouTube extraction returned no downloadable formats. This usually means YouTube blocked the server IP or the JS challenge solver (EJS) is not working in this environment.",
+          });
+        }
 
         return res.status(200).json({
           id: ytResult.id,

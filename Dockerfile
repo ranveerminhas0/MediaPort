@@ -52,19 +52,23 @@ RUN apt-get update && apt-get install -y \
     # General utilities
     wget \
     curl \
+    unzip \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp and gallery-dl via pip
+# Install Deno (yt-dlp recommended JS runtime for YouTube EJS challenges)
+ARG DENO_VERSION=2.6.6
+RUN curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip \
+    && unzip -q /tmp/deno.zip -d /usr/local/bin \
+    && rm -f /tmp/deno.zip \
+    && deno --version
+
+# Install yt-dlp with EJS support + helpers
 RUN pip3 install --no-cache-dir --break-system-packages \
-    yt-dlp \
-    gallery-dl
-
-# Always get the absolute latest yt-dlp (bypasses pip cache)
-RUN pip3 install --no-cache-dir --break-system-packages -U yt-dlp
-
-# Install curl_cffi for yt-dlp --impersonate support
-RUN pip3 install --no-cache-dir --break-system-packages curl_cffi
+    "yt-dlp[default]" \
+    gallery-dl \
+    curl_cffi \
+    && pip3 install --no-cache-dir --break-system-packages -U "yt-dlp[default]"
 
 # Set the working directory
 WORKDIR /app
