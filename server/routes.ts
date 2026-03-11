@@ -213,7 +213,7 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
       "--no-playlist",
       "--geo-bypass",
       "--js-runtimes", "node",
-      "--extractor-args", "youtube:player_client=web_music,default",
+      "--extractor-args", "youtube:player_client=ios,default",
       "--ignore-no-formats-error",
       ...cookieArgs,
       "--",
@@ -241,7 +241,7 @@ async function extractWithYtDlp(url: string, cookieArgs: string[]) {
     vcodec: f.vcodec?.toString(),
     acodec: f.acodec?.toString(),
     format_note: f.format_note?.toString()
-  })).filter((f: any) => f.url);
+  })).filter((f: any) => f.url && f.ext !== "mhtml" && !f.format_note?.toLowerCase().includes("storyboard"));
 
   // Fallback for single-file posts (like images) that don't use a 'formats' array
   if (formats.length === 0 && data.url) {
@@ -962,7 +962,7 @@ export async function registerRoutes(
         "-f", formatId,
         "--merge-output-format", "mp4",
         "--js-runtimes", "node",
-        "--extractor-args", "youtube:player_client=web_music,default",
+        "--extractor-args", "youtube:player_client=ios,default",
         ...cookieArgs,
         "-o", outTemplate,
         "--",
@@ -1115,7 +1115,7 @@ export async function registerRoutes(
         "--retries", "2",
         ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
         "--js-runtimes", "node",
-        "--extractor-args", "youtube:player_client=web_music,default",
+        "--extractor-args", "youtube:player_client=ios,default",
         ...metadataArgs,
         // Skip cookies for ytsearch (can worsen n-challenge); use them for direct URLs
         ...((platform === "spotify" || platform === "apple_music") ? [] : cookieArgs),
@@ -1147,7 +1147,7 @@ export async function registerRoutes(
         if (code !== 0 && platform === "youtube_music" && stderrOutput.includes("Music Premium members")) {
           console.log(`[audio-dl] Track restricted for ${jobId}, retrying with search...`);
 
-          const searchTerms = artist ? `${artist} - ${title}` : title || "YouTube Music track";
+          const searchTerms = artist ? `${artist} - ${title}` : title || "unknown track";
           const searchQuery = `ytsearch1:"${searchTerms} official audio"`;
 
           const retryArgs = [
@@ -1159,7 +1159,7 @@ export async function registerRoutes(
             "--retries", "2",
             ...(supportsRichMeta ? ["--embed-thumbnail", "--add-metadata"] : []),
             "--js-runtimes", "node",
-            "--extractor-args", "youtube:player_client=web_music,default",
+            "--extractor-args", "youtube:player_client=ios,default",
             ...metadataArgs,
             "-o", outTemplate,
             "--",
